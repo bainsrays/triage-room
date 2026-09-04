@@ -24,7 +24,7 @@ export default function SiteFooter() {
           <span>
             Built by <strong className="font-semibold text-ink">Sodiq</strong>
           </span>
-          <a href="https://www.linkedin.com/in/" target="_blank" rel="noreferrer" className="font-medium hover:text-ink">
+          <a href="https://www.linkedin.com/in/sodiq-egberongbe-b3239166" target="_blank" rel="noreferrer" className="font-medium hover:text-ink">
             LinkedIn
           </a>
           <a href="https://github.com/bainsrays/triage-room" target="_blank" rel="noreferrer" className="font-medium hover:text-ink">

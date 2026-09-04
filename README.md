@@ -52,3 +52,8 @@ If you find a ticket where two root-cause options are both defensible, open an i
 ## Fictional data
 
 All customers, companies, card numbers (test ranges only), routing numbers (999-prefixed), transaction references, wallet addresses and internal policies are invented for training. Nothing here describes a specific employer.
+
+## License
+
+MIT. See [LICENSE](LICENSE). Ticket content, rubric and code are all covered; reuse them for your own training, hiring exercises or forks with attribution.
+
