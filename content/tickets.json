@@ -1,0 +1,2397 @@
+{
+  "tickets": [
+    {
+      "id": "INC-2101",
+      "title": "Transfer stuck \"Pending\" for 6 hours",
+      "track": "Payments",
+      "difficulty": "hard",
+      "channel": "in-app chat",
+      "priority": "HIGH",
+      "sla_minutes": 60,
+      "customer": {
+        "name": "Ifeoma Chukwu",
+        "kyc_tier": "Tier 3",
+        "country": "Nigeria",
+        "rails": [
+          "NIP transfer (bank-to-bank)"
+        ],
+        "account_summary": "Personal wallet, verified 14 months, average 6 outbound transfers/month, no prior disputes."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-28T15:10:00+01:00",
+          "text": "Good afternoon. I sent NGN 250,000 to my supplier this morning at about 8:40am and it is still showing Pending on my app. My supplier says he has not received anything. He needs this today to release my goods. Please can someone check this urgently?"
+        },
+        {
+          "from": "customer",
+          "timestamp": "2026-08-28T15:42:00+01:00",
+          "text": "Please should I just send it again from my other account so he can release the goods, and you refund me later when this one clears?"
+        }
+      ],
+      "hidden_root_cause": "The beneficiary bank returned a TIMEOUT response on the NIP (NIBSS Instant Payment) leg during a partner-bank degradation window. Our system correctly queued the transaction for a status requery but a backlog in the requery worker left it displayed as PENDING instead of moving it to REVERSAL_INITIATED. The money never left the customer's wallet-of-record; it is held in a suspense state pending requery, not lost, and not with the supplier's bank.",
+      "red_herring": "Customer assumes the money has left the building and reached (or is stuck at) the supplier's bank, and asks to send a second payment 'and get refunded later' — doing this would create a genuine duplicate-payment problem on top of a transient one.",
+      "tools": {
+        "customer_360": {
+          "profile": {
+            "name": "Ifeoma Chukwu",
+            "kyc_tier": "Tier 3",
+            "country": "Nigeria",
+            "phone": "+234 803 xxx 4471",
+            "wallet_id": "WAL-88213",
+            "member_since": "2025-06-14",
+            "recent_tickets": [
+              "None in last 90 days"
+            ],
+            "notes": "No fraud flags. No prior chargebacks."
+          }
+        },
+        "transaction_log": {
+          "columns": [
+            "reference",
+            "timestamp",
+            "amount_ngn",
+            "beneficiary_bank",
+            "channel",
+            "status",
+            "processor_response"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-9F31A2",
+              "timestamp": "2026-08-28T08:41:12+01:00",
+              "amount_ngn": 250000,
+              "beneficiary_bank": "First Horizon MFB",
+              "channel": "NIP",
+              "status": "PENDING",
+              "processor_response": "TIMEOUT"
+            }
+          ],
+          "status_history": [
+            {
+              "timestamp": "2026-08-28T08:41:12+01:00",
+              "status": "INITIATED",
+              "note": "Debit authorized, wallet balance held."
+            },
+            {
+              "timestamp": "2026-08-28T08:41:19+01:00",
+              "status": "SENT_TO_NIBSS",
+              "note": "NIP request dispatched."
+            },
+            {
+              "timestamp": "2026-08-28T09:18:47+01:00",
+              "status": "PENDING",
+              "note": "processor_response=TIMEOUT; requery job queued, retry_count=1"
+            },
+            {
+              "timestamp": "2026-08-28T15:05:00+01:00",
+              "status": "PENDING",
+              "note": "No further status change recorded; requery worker backlog flagged by monitoring at 12:30."
+            }
+          ]
+        },
+        "processor_status": {
+          "incidents": [
+            {
+              "partner": "NIBSS – First Horizon MFB corridor",
+              "start": "2026-08-28T08:40:00+01:00",
+              "end": "2026-08-28T09:20:00+01:00",
+              "status": "DEGRADED",
+              "description": "Elevated timeout rate on inbound credit confirmations for this beneficiary bank during the window. Resolved by partner at 09:20."
+            },
+            {
+              "partner": "Requery worker (internal)",
+              "start": "2026-08-28T12:30:00+01:00",
+              "end": null,
+              "status": "BACKLOGGED",
+              "description": "Queue depth 340 transactions above normal; on-call paged 12:35."
+            }
+          ]
+        },
+        "knowledge_base": [
+          {
+            "title": "NIP timeout & requery policy",
+            "body": "When NIBSS returns TIMEOUT, the transaction must be requeried within 15 minutes. NIP settles in real time, 24/7, so requery and reversal SLAs run on calendar hours, not banking business hours. If requery confirms the debit did not reach the beneficiary, initiate REVERSAL_INITIATED and credit the customer within 24 hours per CBN guidance on failed electronic transfer reversals. Never advise the customer to resend while a transaction shows PENDING with a TIMEOUT processor_response — this risks a duplicate payment if both eventually settle."
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "transactions",
+          "schema": [
+            "reference",
+            "timestamp",
+            "amount_ngn",
+            "beneficiary_bank",
+            "channel",
+            "status",
+            "processor_response"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-9F31A2",
+              "timestamp": "2026-08-28T08:41:12+01:00",
+              "amount_ngn": 250000,
+              "beneficiary_bank": "First Horizon MFB",
+              "channel": "NIP",
+              "status": "PENDING",
+              "processor_response": "TIMEOUT"
+            }
+          ],
+          "suggested_queries": [
+            {
+              "query": "SELECT reference, status, processor_response FROM transactions WHERE reference = 'TRX-9F31A2';",
+              "result_summary": "Returns 1 row: status=PENDING, processor_response=TIMEOUT — confirms the NIP leg timed out and was never marked failed or reversed."
+            },
+            {
+              "query": "SELECT reference, status, processor_response FROM transactions WHERE processor_response = 'TIMEOUT' AND status = 'PENDING';",
+              "result_summary": "Confirms this is the pattern to check for stuck-transfer tickets generally: PENDING + TIMEOUT means requery/reversal is owed, not a resend."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Beneficiary bank returned TIMEOUT on the NIP leg; requery backlog kept status at PENDING instead of triggering reversal.",
+          "correct": true
+        },
+        {
+          "text": "The supplier's bank account is closed or invalid, rejecting the credit silently.",
+          "correct": false
+        },
+        {
+          "text": "Ifeoma's wallet had insufficient funds and the debit never actually completed.",
+          "correct": false
+        },
+        {
+          "text": "This is a suspected fraud hold pending manual review.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Manually trigger the requery job for TRX-9F31A2, initiate REVERSAL_INITIATED, and credit Ifeoma's wallet within 24 hours if the requery confirms non-delivery; explicitly advise her not to send a second payment.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Tell her to wait 48 hours for the bank to sort it out with no update on system status.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Approve a manual reversal immediately without requerying NIBSS first.",
+          "correct": false,
+          "quality": "acceptable_but_risky"
+        },
+        {
+          "text": "Advise her to send the second payment now since the supplier needs it today.",
+          "correct": false,
+          "quality": "wrong"
+        }
+      ],
+      "escalation": {
+        "required": true,
+        "target": "Payments Ops (requery worker backlog + manual reversal trigger)",
+        "required_payload": [
+          "Transaction reference",
+          "Timeline of events"
+        ]
+      },
+      "customer_expectation_timeframe": "Reversal confirmation within 24 hours (calendar hours — NIP runs 24/7, so this is not tied to banking business hours) if requery shows non-delivery",
+      "model_reply": "Hi Ifeoma, thank you for flagging this and for your patience. I've checked TRX-9F31A2 and can see the delay was caused by a timeout between us and your supplier's bank during a short window this morning — your NGN 250,000 has not left your account for good; it's held safely while we confirm delivery. I've triggered a manual recheck with the bank now. If it confirms the transfer did not go through, we will reverse it back to your wallet within 24 hours, and you'll see a status update in your app. Please do not send a second payment in the meantime — if you do and both eventually complete, you'd end up paying twice, and reconciling that takes longer than this fix. I'll follow up here as soon as I have a confirmed outcome, and by end of day at the latest.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Selected a root cause unrelated to the TIMEOUT/requery evidence (e.g., fraud hold, insufficient funds).",
+          "1": "Identified 'bank issue' generically without citing the TIMEOUT processor_response or requery backlog.",
+          "2": "Correctly identified the TIMEOUT + stalled requery but missed that funds are still held (not lost, not delivered).",
+          "3": "Correctly ties processor_response=TIMEOUT to the requery backlog and explains funds are held pending reversal, not delivered or lost."
+        },
+        "tool_efficiency": {
+          "0": "Jumped to a resolution without opening Transaction Log or Processor Status.",
+          "1": "Opened Transaction Log only; missed Processor Status incident window.",
+          "2": "Checked Transaction Log and Processor Status but not the Knowledge Base article on requery policy.",
+          "3": "Checked status history timeline, cross-referenced the Processor Status incident window, ran the SQL query filtering transactions by reference to confirm processor_response=TIMEOUT, and read the requery/reversal KB article before deciding."
+        },
+        "compliance_safety": {
+          "0": "Advised or implied the customer should send a second payment.",
+          "1": "Did not advise a second payment but gave no reason why it's risky.",
+          "2": "Discouraged the second payment with a vague reason.",
+          "3": "Explicitly told the customer not to resend and explained the duplicate-payment risk in plain language."
+        },
+        "communication_clarity": {
+          "0": "Reply is jargon-heavy (mentions NIP/NIBSS/processor codes to the customer) or blames the customer/bank unhelpfully.",
+          "1": "Plain language but no concrete timeframe given.",
+          "2": "Plain language with a timeframe, but no acknowledgement of urgency/impact on her supplier.",
+          "3": "Acknowledges impact, explains cause in plain language, gives a concrete 24-hour timeframe, and sets a clear next step."
+        },
+        "escalation_judgment": {
+          "0": "Did not escalate; treated it as self-resolvable with no Ops involvement.",
+          "1": "Escalated to the wrong team (e.g., Compliance or Crypto Ops).",
+          "2": "Escalated to Payments Ops but without specifying the requery/reversal action needed.",
+          "3": "Escalated to Payments Ops specifically to trigger the requery and manual reversal, matching the ground truth."
+        }
+      }
+    },
+    {
+      "id": "INC-2102",
+      "title": "Debited twice for one payment at the pharmacy",
+      "track": "Payments",
+      "difficulty": "medium",
+      "channel": "email",
+      "priority": "HIGH",
+      "sla_minutes": 120,
+      "customer": {
+        "name": "Tunde Balogun",
+        "kyc_tier": "Tier 1",
+        "country": "Nigeria",
+        "rails": [
+          "Card (POS terminal)"
+        ],
+        "account_summary": "Debit card linked to wallet, active 8 months, no prior disputes."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-29T11:05:00+01:00",
+          "text": "I paid NGN 12,500 at MedPlus pharmacy on Allen Avenue this morning with my card linked to your app. I only bought one thing but my transaction history shows two debits of NGN 12,500 each, one after the other. The pharmacy only gave me one receipt. Please refund the extra one, this is not fair."
+        }
+      ],
+      "hidden_root_cause": "The POS terminal timed out waiting for an authorization response after the first swipe. The cashier retried the transaction on the same terminal. Both authorizations actually reached the acquirer and were captured; the acquirer's dedupe logic (which should void a repeated auth within a short window on the same card/terminal/amount) failed to fire, so both were captured as separate, valid debits instead of the first being auto-reversed.",
+      "red_herring": "The two transactions have different retrieval reference numbers, which can look like 'two separate legitimate purchases' at a glance — different refs are actually expected for two separate authorizations and does not rule out duplicate-charge; the real tell is same merchant, same amount, seconds apart.",
+      "tools": {
+        "customer_360": {
+          "profile": {
+            "name": "Tunde Balogun",
+            "kyc_tier": "Tier 1",
+            "country": "Nigeria",
+            "wallet_id": "WAL-51044",
+            "member_since": "2026-01-02",
+            "recent_tickets": [
+              "None"
+            ],
+            "notes": "No fraud flags."
+          }
+        },
+        "transaction_log": {
+          "columns": [
+            "reference",
+            "retrieval_ref",
+            "timestamp",
+            "amount_ngn",
+            "merchant",
+            "mcc",
+            "channel",
+            "status",
+            "auth_code"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-A014C2",
+              "retrieval_ref": "RRN-220819331044",
+              "timestamp": "2026-08-29T09:12:03+01:00",
+              "amount_ngn": 12500,
+              "merchant": "MedPlus Pharmacy - Allen Ave",
+              "mcc": "5912",
+              "channel": "POS",
+              "status": "CAPTURED",
+              "auth_code": "A1B2C3"
+            },
+            {
+              "reference": "TRX-A014C9",
+              "retrieval_ref": "RRN-220819331091",
+              "timestamp": "2026-08-29T09:12:50+01:00",
+              "amount_ngn": 12500,
+              "merchant": "MedPlus Pharmacy - Allen Ave",
+              "mcc": "5912",
+              "channel": "POS",
+              "status": "CAPTURED",
+              "auth_code": "A1B2D7"
+            }
+          ],
+          "status_history": [
+            {
+              "timestamp": "2026-08-29T09:12:03+01:00",
+              "status": "AUTH_REQUESTED",
+              "note": "First swipe, terminal ID TML-7729"
+            },
+            {
+              "timestamp": "2026-08-29T09:12:34+01:00",
+              "status": "TIMEOUT_AT_TERMINAL",
+              "note": "Terminal did not receive auth response within 30s window (auth had actually succeeded upstream at 09:12:09)"
+            },
+            {
+              "timestamp": "2026-08-29T09:12:50+01:00",
+              "status": "AUTH_REQUESTED_RETRY",
+              "note": "Second swipe, same terminal ID TML-7729, same amount"
+            },
+            {
+              "timestamp": "2026-08-29T09:12:55+01:00",
+              "status": "CAPTURED",
+              "note": "Both auths captured; dedupe rule (same card+terminal+amount within 120s) did not trigger a void on the first."
+            }
+          ]
+        },
+        "chargeback_tool": {
+          "eligibility_check": {
+            "reference": "TRX-A014C9",
+            "reason_code": "4834",
+            "reason_label": "Duplicate Processing",
+            "eligible": true,
+            "evidence_required": [
+              "Two auths, same card, same merchant, same amount, within short window",
+              "Customer statement of single purchase",
+              "Single pharmacy receipt"
+            ],
+            "deadline_days": 120
+          }
+        },
+        "sql_scratchpad": {
+          "table": "transactions",
+          "schema": [
+            "reference",
+            "retrieval_ref",
+            "timestamp",
+            "amount_ngn",
+            "merchant",
+            "mcc",
+            "channel",
+            "status",
+            "auth_code"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-A014C2",
+              "retrieval_ref": "RRN-220819331044",
+              "timestamp": "2026-08-29T09:12:03+01:00",
+              "amount_ngn": 12500,
+              "merchant": "MedPlus Pharmacy - Allen Ave",
+              "mcc": "5912",
+              "channel": "POS",
+              "status": "CAPTURED",
+              "auth_code": "A1B2C3"
+            },
+            {
+              "reference": "TRX-A014C9",
+              "retrieval_ref": "RRN-220819331091",
+              "timestamp": "2026-08-29T09:12:50+01:00",
+              "amount_ngn": 12500,
+              "merchant": "MedPlus Pharmacy - Allen Ave",
+              "mcc": "5912",
+              "channel": "POS",
+              "status": "CAPTURED",
+              "auth_code": "A1B2D7"
+            }
+          ],
+          "suggested_queries": [
+            {
+              "query": "SELECT reference, retrieval_ref, timestamp, amount_ngn, auth_code FROM transactions WHERE merchant = 'MedPlus Pharmacy - Allen Ave' ORDER BY timestamp;",
+              "result_summary": "Returns 2 rows, same merchant/amount, 47 seconds apart, two different auth_codes (A1B2C3, A1B2D7) — two genuine, separately-captured authorizations, not a display glitch."
+            },
+            {
+              "query": "SELECT COUNT(*), SUM(amount_ngn) FROM transactions WHERE merchant = 'MedPlus Pharmacy - Allen Ave' AND timestamp BETWEEN '2026-08-29T09:12:00+01:00' AND '2026-08-29T09:13:00+01:00';",
+              "result_summary": "COUNT=2, SUM=25000 — confirms exactly one extra NGN 12,500 capture within a 1-minute window, which is what the chargeback should target."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "POS retry after a terminal timeout led to two separate captures because the dedupe/void logic did not fire on the first auth.",
+          "correct": true
+        },
+        {
+          "text": "The customer actually bought two items and forgot the second purchase.",
+          "correct": false
+        },
+        {
+          "text": "Card was compromised and used fraudulently at a different location.",
+          "correct": false
+        },
+        {
+          "text": "The pharmacy manually re-keyed the transaction the next day, causing a second charge.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Raise a duplicate-transaction chargeback (reason code 4834) on TRX-A014C9, explain the 5-7 business day refund timeline, no escalation needed.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Refund instantly from the wallet balance without filing a chargeback, absorbing the cost silently.",
+          "correct": false,
+          "quality": "acceptable_but_risky"
+        },
+        {
+          "text": "Tell the customer to dispute directly with the pharmacy since it's their terminal.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Deny the refund because both transactions show status CAPTURED and have different retrieval refs.",
+          "correct": false,
+          "quality": "wrong"
+        }
+      ],
+      "escalation": {
+        "required": false,
+        "target": null
+      },
+      "customer_expectation_timeframe": "5-7 business days for the chargeback refund to land",
+      "model_reply": "Hi Tunde, thanks for flagging this and sorry for the trouble. I checked your account and can confirm what happened: the terminal timed out after your first swipe at MedPlus, so it was retried — but both attempts actually went through on our end, which is why you were charged twice for one purchase. I've filed a duplicate-transaction dispute for the second charge of NGN 12,500 (reference TRX-A014C9). You don't need to do anything else on your side; the refund should land back on your card within 5-7 business days. I'll update you here once it's confirmed.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Concluded it was fraud or a genuine second purchase.",
+          "1": "Identified 'duplicate charge' without explaining the terminal timeout/retry mechanism.",
+          "2": "Identified the timeout+retry mechanism but not that dedupe/void logic was what failed.",
+          "3": "Correctly explains the terminal timeout, the retry, and that dedupe/void logic failed to reverse the first auth, resulting in two valid captures."
+        },
+        "tool_efficiency": {
+          "0": "Did not open Transaction Log before deciding.",
+          "1": "Opened Transaction Log but ignored timestamps/retrieval refs.",
+          "2": "Compared the two transactions but didn't check chargeback eligibility before proposing a fix.",
+          "3": "Compared timestamps, amounts, and merchant on both rows (via table view or the SQL query grouping by merchant/time window), then checked chargeback eligibility/reason code before resolving."
+        },
+        "compliance_safety": {
+          "0": "Promised an instant refund with a specific guaranteed date, or shared full card number in the reply.",
+          "1": "Vague refund promise with no process named.",
+          "2": "Named the chargeback process but no realistic timeframe.",
+          "3": "Named the correct process (duplicate chargeback, reason code) with a realistic 5-7 day timeframe and no over-promising."
+        },
+        "communication_clarity": {
+          "0": "Blames the customer or the pharmacy for the error.",
+          "1": "Plain language but no clear next step.",
+          "2": "Clear next step but no timeframe.",
+          "3": "Clear, blame-free explanation, concrete next step (dispute filed), and realistic timeframe."
+        },
+        "escalation_judgment": {
+          "0": "Escalated to a team when this is a standard, self-resolvable chargeback process.",
+          "1": "Unsure/left escalation ambiguous.",
+          "2": "Correctly did not escalate but gave no reasoning.",
+          "3": "Correctly recognized this as standard process (no escalation needed) since chargeback tooling covers it directly."
+        }
+      }
+    },
+    {
+      "id": "INC-2103",
+      "title": "Account locked after \"suspicious login\"",
+      "track": "Identity & Risk",
+      "difficulty": "medium",
+      "channel": "in-app chat",
+      "priority": "MEDIUM",
+      "sla_minutes": 180,
+      "customer": {
+        "name": "Grace Adebayo",
+        "kyc_tier": "Tier 2",
+        "country": "Nigeria (currently travelling in UK)",
+        "rails": [
+          "N/A - login/access issue"
+        ],
+        "account_summary": "Wallet verified 20 months, frequent traveller, previously logged in from 2 countries before."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-30T19:22:00+01:00",
+          "text": "Hi, I can't log in to my account. It says my account is restricted for security reasons. I am currently travelling in London for a work trip and I think I mistyped my login code a few times on a new laptop. Can you please help me get back in? I need to pay for something tonight."
+        }
+      ],
+      "hidden_root_cause": "The risk engine auto-locked the account because three conditions coincided within a 10-minute window: a login attempt from a new, never-seen device fingerprint, a country change (Lagos to London) with no prior travel notice, and three consecutive failed OTP entries. This combination matches the automated account-takeover-prevention rule. All evidence points to this being the genuine customer travelling, not a takeover attempt: her KYC tier is verified, there are no fraud flags, and the failed OTPs match a plausible fat-finger pattern on a new device rather than automated guessing (attempts were 45+ seconds apart, not scripted).",
+      "red_herring": "A new device fingerprint AND a new country together look alarming and could be mistaken for account takeover in progress; the real distinguishing signal is the human-paced OTP attempts (not scripted/rapid) plus a clean KYC/fraud history, which together indicate a legitimate traveller, not a takeover.",
+      "tools": {
+        "customer_360": {
+          "profile": {
+            "name": "Grace Adebayo",
+            "kyc_tier": "Tier 2",
+            "country_registered": "Nigeria",
+            "wallet_id": "WAL-33291",
+            "member_since": "2024-12-20",
+            "recent_tickets": [
+              "None"
+            ],
+            "notes": "No fraud flags. Prior login history shows occasional travel to Ghana and Kenya, always with prior device registration."
+          }
+        },
+        "auth_risk_events": {
+          "columns": [
+            "timestamp",
+            "event",
+            "device_fingerprint",
+            "geo",
+            "detail"
+          ],
+          "rows": [
+            {
+              "timestamp": "2026-08-30T19:05:11+01:00",
+              "event": "LOGIN_ATTEMPT",
+              "device_fingerprint": "DEV-NEW-88f2 (never seen)",
+              "geo": "London, UK",
+              "detail": "Password correct."
+            },
+            {
+              "timestamp": "2026-08-30T19:05:44+01:00",
+              "event": "OTP_SENT",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "6-digit OTP sent to registered phone +234."
+            },
+            {
+              "timestamp": "2026-08-30T19:06:31+01:00",
+              "event": "OTP_FAILED",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "Attempt 1 of 3, entered code did not match."
+            },
+            {
+              "timestamp": "2026-08-30T19:07:20+01:00",
+              "event": "OTP_FAILED",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "Attempt 2 of 3, entered code did not match."
+            },
+            {
+              "timestamp": "2026-08-30T19:08:09+01:00",
+              "event": "OTP_FAILED",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "Attempt 3 of 3, entered code did not match. Risk engine auto-lock triggered."
+            },
+            {
+              "timestamp": "2026-08-30T19:08:10+01:00",
+              "event": "ACCOUNT_LOCKED",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "Rule: new_device + geo_change + 3x_otp_fail_within_10min."
+            }
+          ],
+          "risk_score": {
+            "current": 62,
+            "threshold_for_lock": 60,
+            "notes": "Score driven by device+geo novelty, not by velocity/automation signals (attempts were 40-50s apart, consistent with manual entry)."
+          }
+        },
+        "kyc_console": {
+          "tier": "Tier 2 (BVN + ID verified)",
+          "fraud_flags": "None",
+          "document_status": "All verified, no expiry issues.",
+          "identity_match_score": 97
+        },
+        "knowledge_base": [
+          {
+            "title": "Account lock: verification & release policy",
+            "body": "When a lock is triggered by new-device + geo-change + OTP failures, support may release the lock after (1) a liveness/ID re-check or KYC-tier confirmation, and (2) confirming the failed OTP pattern is consistent with manual entry (not scripted). Advise the customer to register the new device to avoid repeat locks."
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "auth_events",
+          "schema": [
+            "timestamp",
+            "event",
+            "device_fingerprint",
+            "geo",
+            "detail"
+          ],
+          "rows": [
+            {
+              "timestamp": "2026-08-30T19:05:11+01:00",
+              "event": "LOGIN_ATTEMPT",
+              "device_fingerprint": "DEV-NEW-88f2 (never seen)",
+              "geo": "London, UK",
+              "detail": "Password correct."
+            },
+            {
+              "timestamp": "2026-08-30T19:05:44+01:00",
+              "event": "OTP_SENT",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "6-digit OTP sent to registered phone +234."
+            },
+            {
+              "timestamp": "2026-08-30T19:06:31+01:00",
+              "event": "OTP_FAILED",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "Attempt 1 of 3, entered code did not match."
+            },
+            {
+              "timestamp": "2026-08-30T19:07:20+01:00",
+              "event": "OTP_FAILED",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "Attempt 2 of 3, entered code did not match."
+            },
+            {
+              "timestamp": "2026-08-30T19:08:09+01:00",
+              "event": "OTP_FAILED",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "Attempt 3 of 3, entered code did not match. Risk engine auto-lock triggered."
+            },
+            {
+              "timestamp": "2026-08-30T19:08:10+01:00",
+              "event": "ACCOUNT_LOCKED",
+              "device_fingerprint": "DEV-NEW-88f2",
+              "geo": "London, UK",
+              "detail": "Rule: new_device + geo_change + 3x_otp_fail_within_10min."
+            }
+          ],
+          "suggested_queries": [
+            {
+              "query": "SELECT timestamp, event, detail FROM auth_events WHERE event = 'OTP_FAILED' ORDER BY timestamp;",
+              "result_summary": "Returns 3 rows at 19:06:31, 19:07:20, 19:08:09 — roughly 40-50 seconds apart, consistent with a human re-entering a code, not a scripted/automated attack (which would show sub-second retries)."
+            },
+            {
+              "query": "SELECT device_fingerprint, geo, COUNT(*) FROM auth_events WHERE device_fingerprint = 'DEV-NEW-88f2' GROUP BY device_fingerprint, geo;",
+              "result_summary": "6 rows, all from the same never-seen device and London geo — a single new-device travel session, not multiple attackers or IPs."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Risk engine correctly locked the account for a legitimate traveller: new device + country change + 3 manual OTP failures, with clean KYC and no fraud flags.",
+          "correct": true
+        },
+        {
+          "text": "The account was actually compromised and someone else is trying to log in from London.",
+          "correct": false
+        },
+        {
+          "text": "Her registered phone number is out of service, so OTPs never actually arrived.",
+          "correct": false
+        },
+        {
+          "text": "A system-wide OTP outage caused all codes to fail for every customer that evening.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Verify identity (ID/liveness match against KYC tier 2), confirm risk score drivers are novelty-based (not automation), release the lock, and advise registering the new device.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Release the lock immediately based on her chat message alone, no verification.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Keep the account locked for 24-48 hours as a blanket security cooldown regardless of verification outcome.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Escalate to Compliance for an AML review before considering any unlock.",
+          "correct": false,
+          "quality": "wrong"
+        }
+      ],
+      "escalation": {
+        "required": false,
+        "target": null
+      },
+      "customer_expectation_timeframe": "Unlock within this chat session once identity is confirmed",
+      "model_reply": "Hi Grace, thanks for reaching out, and sorry this is happening while you're travelling. I can see your account was locked automatically because you logged in from a new device in a new country and had a few OTP mismatches in a row — that's a standard safety trigger, not a sign anything is wrong with your account. To release the lock, I just need to quickly confirm it's you: could you complete a quick ID check (I'll send the link now)? Once that's done I'll lift the restriction right away so you can log in and make your payment tonight. Going forward, I'd recommend registering this laptop as a trusted device from your settings once you're back in, so travel doesn't trigger this again.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Assumed account takeover or refused to consider the lock could be a false positive.",
+          "1": "Recognized it as a security lock but didn't identify the three specific triggering conditions.",
+          "2": "Identified new device + geo change + OTP failures but missed the human-paced (non-scripted) OTP timing as evidence of legitimacy.",
+          "3": "Correctly identifies all three trigger conditions and explains why the OTP timing pattern plus clean KYC support a legitimate traveller, not a takeover."
+        },
+        "tool_efficiency": {
+          "0": "Unlocked or refused to unlock without checking Auth & Risk Events.",
+          "1": "Checked Auth & Risk Events but not KYC Console.",
+          "2": "Checked both but didn't examine OTP attempt timing/spacing.",
+          "3": "Checked Auth & Risk Events (including OTP timing, ideally confirmed via the SQL query on auth_events showing ~45s gaps), KYC Console (fraud flags, match score), before deciding."
+        },
+        "compliance_safety": {
+          "0": "Unlocked with zero identity verification.",
+          "1": "Verified identity but via an insecure channel (e.g., asked for password over chat).",
+          "2": "Verified identity appropriately but did not advise device registration to prevent recurrence.",
+          "3": "Verified identity via the appropriate KYC/liveness step, unlocked, and advised registering the new device."
+        },
+        "communication_clarity": {
+          "0": "Reply sounds accusatory or implies she may be a fraudster.",
+          "1": "Plain language but no explanation of why the lock happened.",
+          "2": "Explains the lock but gives no timeframe for resolution.",
+          "3": "Reassures her, explains the lock in plain terms, gives a same-session unlock timeframe, and offers a forward-looking tip."
+        },
+        "escalation_judgment": {
+          "0": "Escalated to Compliance/Fraud team unnecessarily for a routine travel lock.",
+          "1": "Unsure whether to escalate, hedged in the reply.",
+          "2": "Correctly did not escalate but no clear reasoning given.",
+          "3": "Correctly resolved without escalation, recognizing this as a standard support-level identity verification case."
+        }
+      }
+    },
+    {
+      "id": "INC-2104",
+      "title": "KYC upgrade rejected three times",
+      "track": "Identity & Risk",
+      "difficulty": "easy",
+      "channel": "email",
+      "priority": "LOW",
+      "sla_minutes": 480,
+      "customer": {
+        "name": "Chidinma Okafor-Nwosu",
+        "kyc_tier": "Tier 1 (applying for Tier 2)",
+        "country": "Nigeria",
+        "rails": [
+          "N/A - KYC/limits issue"
+        ],
+        "account_summary": "Wallet 5 months old, wants higher transfer limits for a small business."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-27T10:15:00+01:00",
+          "text": "Good morning. I have uploaded my ID three times now to upgrade my account and it keeps saying rejected. I need my limit raised so I can pay my suppliers. My ID is clear, I don't understand why it keeps failing. Please help."
+        }
+      ],
+      "hidden_root_cause": "Chidinma's uploaded ID document shows her legal name as 'Chidinma Okafor-Nwosu' (hyphenated surname, reflecting her married name), while the BVN (Bank Verification Number) record on file shows 'Chidinma Okafor' (unhyphenated, maiden name only). The automated name-matching algorithm scored the match at 78 out of 100, below the 85 auto-approve threshold, causing automatic rejection each time despite the document image itself being clear and genuine.",
+      "red_herring": "The customer assumes the document image quality is the problem (since it 'looks clear' to her) and keeps re-uploading the same document, which will never fix a name-matching score issue — the fix is a policy override or supporting document, not a better photo.",
+      "tools": {
+        "kyc_console": {
+          "submission_history": [
+            {
+              "attempt": 1,
+              "timestamp": "2026-08-25T09:00:00+01:00",
+              "document_status": "IMAGE_OK",
+              "name_on_doc": "Chidinma Okafor-Nwosu",
+              "name_on_bvn": "Chidinma Okafor",
+              "match_score": 78,
+              "threshold": 85,
+              "outcome": "REJECTED"
+            },
+            {
+              "attempt": 2,
+              "timestamp": "2026-08-26T14:20:00+01:00",
+              "document_status": "IMAGE_OK",
+              "name_on_doc": "Chidinma Okafor-Nwosu",
+              "name_on_bvn": "Chidinma Okafor",
+              "match_score": 78,
+              "threshold": 85,
+              "outcome": "REJECTED"
+            },
+            {
+              "attempt": 3,
+              "timestamp": "2026-08-27T08:45:00+01:00",
+              "document_status": "IMAGE_OK",
+              "name_on_doc": "Chidinma Okafor-Nwosu",
+              "name_on_bvn": "Chidinma Okafor",
+              "match_score": 78,
+              "threshold": 85,
+              "outcome": "REJECTED"
+            }
+          ],
+          "field_diff": {
+            "first_name": "MATCH (Chidinma)",
+            "surname": "PARTIAL MATCH (Okafor-Nwosu vs Okafor — subset match, hyphenated addition)",
+            "date_of_birth": "MATCH",
+            "document_type": "National ID (NIN slip)",
+            "document_authenticity_check": "PASS"
+          }
+        },
+        "knowledge_base": [
+          {
+            "title": "KYC name-mismatch override policy",
+            "body": "If the automated name-match score is above 70 and the document authenticity check passes, support/compliance may manually approve with a documented override reason (e.g., 'hyphenated married surname, subset match, DOB confirmed'). If the score is below 70, request a supporting document (marriage certificate or affidavit of name change) instead of overriding."
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "customers",
+          "schema": [
+            "customer_name",
+            "name_on_bvn",
+            "kyc_tier",
+            "submission_attempt",
+            "match_score",
+            "threshold",
+            "outcome"
+          ],
+          "rows": [
+            {
+              "customer_name": "Chidinma Okafor-Nwosu",
+              "name_on_bvn": "Chidinma Okafor",
+              "kyc_tier": "Tier 1",
+              "submission_attempt": 1,
+              "match_score": 78,
+              "threshold": 85,
+              "outcome": "REJECTED"
+            },
+            {
+              "customer_name": "Chidinma Okafor-Nwosu",
+              "name_on_bvn": "Chidinma Okafor",
+              "kyc_tier": "Tier 1",
+              "submission_attempt": 2,
+              "match_score": 78,
+              "threshold": 85,
+              "outcome": "REJECTED"
+            },
+            {
+              "customer_name": "Chidinma Okafor-Nwosu",
+              "name_on_bvn": "Chidinma Okafor",
+              "kyc_tier": "Tier 1",
+              "submission_attempt": 3,
+              "match_score": 78,
+              "threshold": 85,
+              "outcome": "REJECTED"
+            }
+          ],
+          "suggested_queries": [
+            {
+              "query": "SELECT submission_attempt, match_score, threshold, outcome FROM customers WHERE customer_name = 'Chidinma Okafor-Nwosu' ORDER BY submission_attempt;",
+              "result_summary": "Returns 3 identical rows: match_score=78 every time, always below threshold=85 — confirms re-uploading the same document will never change the outcome; the fix is a policy override or supporting document, not a better photo."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Name-match score (78) falls below the 85 auto-approve threshold due to a hyphenated married surname on the ID vs. maiden name on BVN; document image itself is fine.",
+          "correct": true
+        },
+        {
+          "text": "The document image is blurry or low quality, causing repeated rejection.",
+          "correct": false
+        },
+        {
+          "text": "The customer's BVN itself is invalid or does not exist in the national database.",
+          "correct": false
+        },
+        {
+          "text": "Her account is flagged for suspected identity fraud pending investigation.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Since match score (78) is above the 70 floor and document authenticity passed, apply a manual override with a documented reason (hyphenated married surname, DOB match confirmed), and escalate to Compliance for override sign-off.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Ask her to re-upload the same ID document a fourth time.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Reject permanently and tell her Tier 2 is not available to her.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Approve unilaterally without any Compliance involvement since the case seems obviously legitimate.",
+          "correct": false,
+          "quality": "acceptable_but_risky"
+        }
+      ],
+      "escalation": {
+        "required": true,
+        "target": "Compliance (KYC override sign-off)",
+        "required_payload": [
+          "Customer evidence (screenshot, doc)",
+          "Timeline of events"
+        ]
+      },
+      "customer_expectation_timeframe": "Override decision within 1 business day, or a request for a supporting document if declined",
+      "model_reply": "Hi Chidinma, thank you for your patience, and I'm sorry for the back-and-forth. I've looked into why your upgrade keeps being rejected: it isn't your document image, which is clear and passes our authenticity check. The issue is that your ID shows 'Okafor-Nwosu' while our records show 'Okafor', so our automated name check can't fully match them on its own. I'm escalating this to our Compliance team with a note explaining the hyphenated married surname and your matching date of birth, so they can manually approve the upgrade. You don't need to re-upload anything for now — I'll follow up within 1 business day with the outcome. If Compliance needs a supporting document (like a marriage certificate), I'll let you know exactly what's required.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Assumed the document image or BVN itself was the problem.",
+          "1": "Identified a 'name mismatch' generically without citing the actual score or threshold.",
+          "2": "Cited the score/threshold but didn't explain the hyphenated-surname cause.",
+          "3": "Correctly explains the hyphenated married surname vs. maiden-name BVN record, and that the 78/85 score — not image quality — caused rejection."
+        },
+        "tool_efficiency": {
+          "0": "Did not open KYC Console before responding.",
+          "1": "Saw the rejection but not the field diff/match score detail.",
+          "2": "Saw the match score and field diff but didn't check the override policy KB article.",
+          "3": "Reviewed submission history, field diff, ran the SQL query showing all 3 attempts scored identically (78/85), and read the override-policy KB article before deciding."
+        },
+        "compliance_safety": {
+          "0": "Approved the upgrade unilaterally with no Compliance sign-off, or promised an outcome Compliance hasn't confirmed.",
+          "1": "Escalated but gave no reasoning/evidence for Compliance to act on.",
+          "2": "Escalated with partial reasoning but didn't note the DOB match / authenticity pass.",
+          "3": "Escalated to Compliance with a clear, documented override reason and no unilateral limit change promised."
+        },
+        "communication_clarity": {
+          "0": "Blames the customer for uploading a 'bad' document.",
+          "1": "Plain language but no explanation of what's actually wrong.",
+          "2": "Explains the mismatch but gives no timeframe.",
+          "3": "Plain-language explanation of the real cause, clear next step (escalation), and a concrete timeframe."
+        },
+        "escalation_judgment": {
+          "0": "Did not escalate at all, tried to resolve unilaterally.",
+          "1": "Escalated to the wrong team (e.g., Payments Ops).",
+          "2": "Escalated to Compliance but without the override rationale.",
+          "3": "Escalated to Compliance specifically for override sign-off, with rationale matching KB policy."
+        }
+      }
+    },
+    {
+      "id": "INC-2105",
+      "title": "Merchant: webhooks not arriving since last night",
+      "track": "Merchant/API",
+      "difficulty": "hard",
+      "channel": "merchant support ticket",
+      "priority": "HIGH",
+      "sla_minutes": 60,
+      "customer": {
+        "name": "Bayo Ogunleye (Engineering Lead, Kaduna Fresh Foods e-commerce)",
+        "kyc_tier": "Merchant Tier 2 (verified business)",
+        "country": "Nigeria",
+        "rails": [
+          "Card + bank transfer checkout, webhook-driven order fulfillment"
+        ],
+        "account_summary": "Merchant integration live 11 months, ~4,000 orders/month, webhook-dependent order confirmation flow."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-31T08:50:00+01:00",
+          "text": "Since last night our orders are not being marked as paid in our system, but your merchant dashboard shows the payments as succeeded. This is causing real problems — customers are paying but not getting their order confirmations and our warehouse team isn't releasing shipments. Please check urgently, this is a B2B outage for us."
+        },
+        {
+          "from": "customer",
+          "timestamp": "2026-08-31T09:15:00+01:00",
+          "text": "We haven't changed anything on our end recently. Is this an outage on your side?"
+        }
+      ],
+      "hidden_root_cause": "The merchant's own infrastructure team rotated their server's TLS certificate at 22:10 the previous night, but the new certificate chain was installed without the required intermediate CA certificate. Our webhook sender performs full chain validation and now receives SSL_HANDSHAKE_FAILED on every delivery attempt to the merchant's endpoint. Retries are continuing on the standard 24-hour exponential backoff schedule (window opened 22:14 the previous night and closes 22:14 that night, roughly 13 hours after this ticket was raised), so the merchant has received zero of the 47 queued webhook notifications so far, even though the underlying payments are succeeding correctly on our side. Once the 24h window closes, no further automatic retries will happen — a manual replay after the merchant fixes the cert chain is required regardless.",
+      "red_herring": "The merchant states 'we haven't changed anything recently' and asks if it's our outage — this points suspicion at us, but Processor & Partner Status shows all systems green; the actual change (a cert rotation) may not have been visible to the person messaging us if it was done by a different sub-team overnight.",
+      "tools": {
+        "customer_360": {
+          "profile": {
+            "name": "Kaduna Fresh Foods (merchant account)",
+            "contact": "Bayo Ogunleye, Engineering Lead",
+            "kyc_tier": "Merchant Tier 2",
+            "integration_age": "11 months",
+            "monthly_volume": "~4,000 orders",
+            "notes": "No prior integration incidents. Webhook endpoint: https://api.kadunafreshfoods.com/webhooks/payments"
+          }
+        },
+        "merchant_api_console": {
+          "webhook_log": {
+            "columns": [
+              "timestamp",
+              "event_type",
+              "endpoint",
+              "http_status",
+              "error",
+              "attempt"
+            ],
+            "rows": [
+              {
+                "timestamp": "2026-08-30T22:14:02+01:00",
+                "event_type": "payment.succeeded",
+                "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+                "http_status": null,
+                "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+                "attempt": 1
+              },
+              {
+                "timestamp": "2026-08-30T22:19:02+01:00",
+                "event_type": "payment.succeeded",
+                "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+                "http_status": null,
+                "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+                "attempt": 2
+              },
+              {
+                "timestamp": "2026-08-30T23:04:02+01:00",
+                "event_type": "payment.succeeded",
+                "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+                "http_status": null,
+                "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+                "attempt": 5
+              },
+              {
+                "timestamp": "2026-08-31T08:40:11+01:00",
+                "event_type": "payment.succeeded",
+                "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+                "http_status": null,
+                "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+                "attempt": 14
+              },
+              {
+                "timestamp": "2026-08-31T09:14:02+01:00",
+                "event_type": "payment.succeeded",
+                "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+                "http_status": null,
+                "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+                "attempt": 15
+              }
+            ],
+            "summary": "100% delivery failure to this endpoint since 2026-08-30 22:14. 47 events queued, 0 delivered, retries continuing on the standard 24-hour exponential backoff schedule (window opened 22:14 last night, closes 22:14 tonight); after the window closes, retries stop automatically and a manual replay is required."
+          },
+          "curl_simulator_output": {
+            "command": "curl -vI https://api.kadunafreshfoods.com/webhooks/payments",
+            "output": "* Server certificate:\n*  subject: CN=api.kadunafreshfoods.com\n*  start date: Aug 30 22:00:00 2026 GMT\n*  expire date: Aug 30 22:00:00 2027 GMT\n*  issuer: CN=Intermediate CA (NOT PROVIDED IN CHAIN)\n* SSL certificate problem: unable to get local issuer certificate\n* Closing connection"
+          },
+          "key_management": {
+            "last_rotation": "2026-07-15",
+            "note": "API key rotation unrelated — no key changes in this window."
+          }
+        },
+        "processor_status": {
+          "incidents": [
+            {
+              "partner": "Core payment processing",
+              "status": "OPERATIONAL",
+              "description": "No incidents. All payment authorizations and captures succeeding normally."
+            }
+          ]
+        },
+        "knowledge_base": [
+          {
+            "title": "Webhook delivery failure: TLS chain errors",
+            "body": "SSL_HANDSHAKE_FAILED with 'unable to get local issuer certificate' means the destination server's TLS certificate chain is missing the intermediate CA. This is a merchant-side server config issue, not a payments outage. Advise the merchant to include the full certificate chain (leaf + intermediate) in their server config. Offer to replay failed webhooks for the affected window once fixed; recommend polling the Payments Status API as a stopgap."
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "webhook_events",
+          "schema": [
+            "timestamp",
+            "event_type",
+            "endpoint",
+            "http_status",
+            "error",
+            "attempt"
+          ],
+          "rows": [
+            {
+              "timestamp": "2026-08-30T22:14:02+01:00",
+              "event_type": "payment.succeeded",
+              "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+              "http_status": null,
+              "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+              "attempt": 1
+            },
+            {
+              "timestamp": "2026-08-30T22:19:02+01:00",
+              "event_type": "payment.succeeded",
+              "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+              "http_status": null,
+              "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+              "attempt": 2
+            },
+            {
+              "timestamp": "2026-08-30T23:04:02+01:00",
+              "event_type": "payment.succeeded",
+              "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+              "http_status": null,
+              "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+              "attempt": 5
+            },
+            {
+              "timestamp": "2026-08-31T08:40:11+01:00",
+              "event_type": "payment.succeeded",
+              "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+              "http_status": null,
+              "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+              "attempt": 14
+            },
+            {
+              "timestamp": "2026-08-31T09:14:02+01:00",
+              "event_type": "payment.succeeded",
+              "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+              "http_status": null,
+              "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+              "attempt": 15
+            }
+          ],
+          "suggested_queries": [
+            {
+              "query": "SELECT error, COUNT(*) FROM webhook_events WHERE endpoint = 'https://api.kadunafreshfoods.com/webhooks/payments' GROUP BY error;",
+              "result_summary": "One error value across all rows: 'SSL_HANDSHAKE_FAILED: unable to get local issuer certificate' — 100% of attempts fail the same way, ruling out an intermittent network blip and pointing to a persistent cert-chain problem."
+            },
+            {
+              "query": "SELECT MIN(timestamp), MAX(attempt) FROM webhook_events WHERE endpoint = 'https://api.kadunafreshfoods.com/webhooks/payments';",
+              "result_summary": "First failure at 2026-08-30 22:14:02, most recent attempt #15 — confirms failures started exactly when the merchant's TLS cert was rotated overnight, and retries are still exhausting per the 24h backoff schedule."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Merchant's TLS certificate rotation last night is missing the intermediate CA in the chain; our webhook sender fails the handshake and cannot deliver, though payments themselves are succeeding.",
+          "correct": true
+        },
+        {
+          "text": "We are having a payments processing outage that is silently failing all transactions.",
+          "correct": false
+        },
+        {
+          "text": "The merchant's API key was revoked, blocking all outbound communication.",
+          "correct": false
+        },
+        {
+          "text": "Our webhook system has a bug that stopped sending events to all merchants globally.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Explain the TLS certificate chain issue is merchant-side, ask them to fix the chain (include intermediate CA), offer to replay the queued webhooks once fixed, and recommend polling the Payments Status API meanwhile.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Tell them it's likely a temporary issue on our side and to wait it out.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Manually mark all their pending orders as paid in their system on their behalf.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Regenerate their API keys as a first troubleshooting step.",
+          "correct": false,
+          "quality": "wrong"
+        }
+      ],
+      "escalation": {
+        "required": false,
+        "target": null
+      },
+      "customer_expectation_timeframe": "Immediate diagnosis; webhook replay available as soon as merchant confirms the cert chain fix",
+      "model_reply": "Hi Bayo, thanks for the detailed report — I've dug into this and can give you a clear answer. Your payments are processing successfully on our side (no outage here: Processor Status is fully green). The issue is that every webhook delivery attempt to your endpoint since 22:14 last night has failed with an SSL handshake error — specifically, the certificate chain your server is presenting is missing the intermediate CA certificate. This lines up with a TLS cert rotation timestamped last night on your endpoint, even if it wasn't visible on your side of the team. Once your infrastructure team adds the intermediate certificate to the chain (this is usually a one-line config fix, e.g. concatenating the full chain in your server config), deliveries should resume immediately. In the meantime: (1) I can replay all 47 queued webhook events for the affected window as soon as your endpoint is fixed — just confirm here and I'll trigger it, and (2) as a stopgap, you can poll our Payments Status API by order reference to confirm paid orders and release shipments without waiting on webhooks. Let me know once the cert is fixed and I'll replay immediately.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Concluded it was a payments outage on our side.",
+          "1": "Identified 'connection issue' generically without citing the SSL error.",
+          "2": "Cited SSL_HANDSHAKE_FAILED but didn't explain the missing intermediate CA / chain issue specifically.",
+          "3": "Correctly identifies the missing intermediate CA in the merchant's cert chain as the cause, distinct from any outage on our side."
+        },
+        "tool_efficiency": {
+          "0": "Did not open Webhook Log or the curl simulator.",
+          "1": "Opened Webhook Log but not the curl/API Console detail.",
+          "2": "Checked Webhook Log and curl output but not Processor Status to rule out an outage.",
+          "3": "Checked Webhook Log (100% failure pattern, confirmed via the SQL GROUP BY error query), curl simulator output (chain error detail), and Processor Status (confirmed no outage) before diagnosing."
+        },
+        "compliance_safety": {
+          "0": "Claimed responsibility for a bug on our side that doesn't exist, or promised to mark their orders paid manually (bypassing their own system integrity).",
+          "1": "Avoided false blame but didn't clearly state the issue is merchant-side.",
+          "2": "Stated it's merchant-side but didn't offer a safe stopgap.",
+          "3": "Clearly attributes the issue to the merchant's cert chain without over-claiming, and offers a safe stopgap (polling) rather than manually altering their order data."
+        },
+        "communication_clarity": {
+          "0": "Response is overly technical jargon dump with no plain-language framing, or dismissive of the B2B urgency.",
+          "1": "Plain language but no concrete next step for the merchant's engineers.",
+          "2": "Gives next steps but no replay offer or stopgap.",
+          "3": "Explains cause in accessible technical terms suitable for an engineer, offers webhook replay, and gives a stopgap (API polling) for the interim."
+        },
+        "escalation_judgment": {
+          "0": "Escalated to Payments Ops for what is a merchant-side config issue.",
+          "1": "Unsure whether to escalate, hedged.",
+          "2": "Correctly did not escalate but no reasoning given.",
+          "3": "Correctly resolved without escalation since root cause and fix are both on the merchant's side; support's job is diagnosis + replay offer."
+        }
+      }
+    },
+    {
+      "id": "INC-2106",
+      "title": "Merchant: API returns 401 after key rotation",
+      "track": "Merchant/API",
+      "difficulty": "hard",
+      "channel": "merchant support ticket",
+      "priority": "MEDIUM",
+      "sla_minutes": 120,
+      "customer": {
+        "name": "Funmi Adeyemi (Backend Developer, Lumo Retail)",
+        "kyc_tier": "Merchant Tier 1 (verified business)",
+        "country": "Nigeria",
+        "rails": [
+          "API integration, card + transfer checkout"
+        ],
+        "account_summary": "Merchant integration live 6 months, small team, recently rotated production secret key."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-29T13:40:00+01:00",
+          "text": "We regenerated our secret key yesterday for security reasons and now every single API call fails with 401 Unauthorized. We are using Bearer auth exactly as documented. Is there an outage on your end? We need this fixed urgently, our checkout is fully down."
+        }
+      ],
+      "hidden_root_cause": "The merchant's engineering team correctly generated a new secret key and correctly updated their STAGING environment variable with it, but forgot to also update the PRODUCTION environment variable. Production is still using the old key, which was automatically revoked the moment the new key was generated (key rotation immediately invalidates the previous key). Every production API call is therefore using a dead key, hence the 401s. The Bearer auth header format itself is correct — that is not the problem.",
+      "red_herring": "The merchant assumes this must be an outage on our side because they are confident they 'did everything right' and the header format (Bearer scheme) is correct — but Processor Status is fully green, and the real issue is which key is being sent, not how it's being sent.",
+      "tools": {
+        "customer_360": {
+          "profile": {
+            "name": "Lumo Retail (merchant account)",
+            "contact": "Funmi Adeyemi, Backend Developer",
+            "kyc_tier": "Merchant Tier 1",
+            "integration_age": "6 months",
+            "notes": "Small technical team (2 developers). No prior integration incidents."
+          }
+        },
+        "merchant_api_console": {
+          "request_inspector": {
+            "columns": [
+              "timestamp",
+              "endpoint",
+              "auth_header_prefix",
+              "http_status",
+              "error_body"
+            ],
+            "rows": [
+              {
+                "timestamp": "2026-08-29T12:05:11+01:00",
+                "endpoint": "POST /v1/charges",
+                "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+                "http_status": 401,
+                "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+              },
+              {
+                "timestamp": "2026-08-29T12:07:44+01:00",
+                "endpoint": "POST /v1/charges",
+                "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+                "http_status": 401,
+                "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+              },
+              {
+                "timestamp": "2026-08-29T13:30:02+01:00",
+                "endpoint": "POST /v1/charges",
+                "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+                "http_status": 401,
+                "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+              }
+            ],
+            "note": "All production requests since rotation use key prefix ending '...old7' (the revoked key). No requests observed using the new key prefix ('...new3') from the production IP range."
+          },
+          "key_management": {
+            "rotation_log": [
+              {
+                "timestamp": "2026-08-28T18:00:00+01:00",
+                "action": "KEY_GENERATED",
+                "new_key_prefix": "sk_live_9mQ2...new3",
+                "note": "Old key sk_live_4kP9...old7 automatically revoked at generation time per rotation policy."
+              }
+            ]
+          },
+          "curl_simulator_output": {
+            "command": "curl -i https://api.example-payments.com/v1/charges -H 'Authorization: Bearer sk_live_9mQ2...new3' -d amount=1000",
+            "output": "HTTP/1.1 200 OK\n{\"id\": \"ch_test001\", \"status\": \"succeeded\"}"
+          }
+        },
+        "processor_status": {
+          "incidents": [
+            {
+              "partner": "Core API / Auth service",
+              "status": "OPERATIONAL",
+              "description": "No incidents. Auth service correctly rejecting revoked keys as designed."
+            }
+          ]
+        },
+        "knowledge_base": [
+          {
+            "title": "API key rotation: common integration mistake",
+            "body": "The most common cause of 401s immediately after a merchant rotates their key is updating only one environment (often staging) and not production, since rotation immediately revokes the old key everywhere. Verify by checking which key prefix appears in the merchant's production requests. Never share back a merchant's full secret key over chat/email, even to help debug — confirm only the prefix and rotation timestamp."
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "auth_events",
+          "schema": [
+            "timestamp",
+            "endpoint",
+            "auth_header_prefix",
+            "http_status",
+            "error_body"
+          ],
+          "rows": [
+            {
+              "timestamp": "2026-08-29T12:05:11+01:00",
+              "endpoint": "POST /v1/charges",
+              "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+              "http_status": 401,
+              "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+            },
+            {
+              "timestamp": "2026-08-29T12:07:44+01:00",
+              "endpoint": "POST /v1/charges",
+              "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+              "http_status": 401,
+              "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+            },
+            {
+              "timestamp": "2026-08-29T13:30:02+01:00",
+              "endpoint": "POST /v1/charges",
+              "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+              "http_status": 401,
+              "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+            }
+          ],
+          "suggested_queries": [
+            {
+              "query": "SELECT DISTINCT auth_header_prefix FROM auth_events WHERE endpoint = 'POST /v1/charges';",
+              "result_summary": "Returns exactly 1 distinct value: 'Bearer sk_live_4kP9...old7' — every production call since the rotation is using the OLD, revoked key. No request has ever used the new '...new3' prefix from production."
+            },
+            {
+              "query": "SELECT http_status, COUNT(*) FROM auth_events GROUP BY http_status;",
+              "result_summary": "100% of rows are http_status=401 with error code invalid_api_key — consistent with a stale key, not a malformed header or platform outage (which would show mixed or 5xx statuses)."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Merchant updated the new key in their staging environment variable only; production is still sending the old, now-revoked key.",
+          "correct": true
+        },
+        {
+          "text": "This is an outage in our authentication service rejecting valid keys.",
+          "correct": false
+        },
+        {
+          "text": "The merchant's Bearer header format is malformed, causing the rejection.",
+          "correct": false
+        },
+        {
+          "text": "The new key was generated with insufficient permissions/scopes.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Show the merchant that production requests are using the old, revoked key prefix; confirm no outage; advise them to update the production environment variable with the new key, and verify with the working curl example.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Send the merchant their full new secret key over the support chat to make sure they have the right one.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Manually re-enable the old, revoked key as a temporary fix.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Escalate to engineering as a suspected platform-wide auth outage.",
+          "correct": false,
+          "quality": "wrong"
+        }
+      ],
+      "escalation": {
+        "required": false,
+        "target": null
+      },
+      "customer_expectation_timeframe": "Immediate — fix is a config change on the merchant's side, no wait time once identified",
+      "model_reply": "Hi Funmi, thanks for the details — good news, there's no outage on our end (Auth service and all core APIs are fully operational). I checked the request logs for your account and I can see the issue: every production call since the rotation is still using the old key (ending '...old7'), which was automatically revoked the moment your new key was generated yesterday at 18:00. It looks like the new key made it into your staging environment but not production — that's a very common thing to miss during rotation. If you update your production environment variable to the new key (ending '...new3') and redeploy, calls should succeed right away — I ran a quick test with that key just now and got a clean 200 OK. For security, I won't share the full key back over chat, but I can confirm the prefix and rotation timestamp anytime you need to double check. Let us know once it's updated, or if you're still seeing 401s after that, and we'll dig further immediately.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Concluded it was an outage or a malformed header issue.",
+          "1": "Identified 'wrong key' generically without specifying staging-vs-production mismatch.",
+          "2": "Identified the staging/production mismatch but didn't confirm via the request inspector's key prefix.",
+          "3": "Correctly identifies that production is using the old, auto-revoked key because the new key only reached staging, confirmed by comparing key prefixes across logs."
+        },
+        "tool_efficiency": {
+          "0": "Did not open Request Inspector or Key Management before responding.",
+          "1": "Opened Request Inspector but not Key Management/rotation log.",
+          "2": "Checked both but didn't run/reference the curl test proving the new key works.",
+          "3": "Checked Request Inspector (key prefix, confirmed via the SQL DISTINCT query showing only the old prefix in production), Key Management (rotation timestamp), Processor Status (ruled out outage), and referenced the working curl test with the new key."
+        },
+        "compliance_safety": {
+          "0": "Shared the full secret key back to the merchant over chat.",
+          "1": "Avoided sharing the full key but was vague about which key/prefix is affected.",
+          "2": "Correctly withheld the full key but didn't explain why (security policy).",
+          "3": "Confirms only the key prefix/rotation timestamp, explicitly states the full key won't be shared over chat, and explains why."
+        },
+        "communication_clarity": {
+          "0": "Blames the merchant harshly or is condescending about the 'common mistake'.",
+          "1": "Plain language but no concrete fix instructions.",
+          "2": "Gives the fix but no verification step or reassurance about urgency.",
+          "3": "Clearly explains the cause, gives the exact fix (update production env var), reassures no outage, and offers a verified working example."
+        },
+        "escalation_judgment": {
+          "0": "Escalated to engineering/platform team for what is a merchant-side config issue.",
+          "1": "Hedged on whether to escalate.",
+          "2": "Correctly did not escalate but with weak reasoning.",
+          "3": "Correctly resolved without escalation, clearly distinguishing this as a merchant-side fix, not a platform incident."
+        }
+      }
+    },
+    {
+      "id": "INC-2107",
+      "title": "Chargeback dispute from merchant side",
+      "track": "Merchant/API",
+      "difficulty": "medium",
+      "channel": "merchant support ticket",
+      "priority": "MEDIUM",
+      "sla_minutes": 240,
+      "customer": {
+        "name": "Ngozi Eze (Operations Manager, Bloom Home Decor)",
+        "kyc_tier": "Merchant Tier 2 (verified business)",
+        "country": "Nigeria",
+        "rails": [
+          "Card checkout, 3-D Secure enabled"
+        ],
+        "account_summary": "Merchant integration live 2 years, first chargeback in 6 months."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-26T10:00:00+01:00",
+          "text": "A customer has disputed an order for NGN 85,000, reason given is 'item not received'. We definitely delivered this — we have a signed delivery note. What do we need to do? Are we going to lose this money automatically?"
+        }
+      ],
+      "hidden_root_cause": "This is a legitimate sale with strong supporting evidence: the transaction passed 3-D Secure (proving cardholder authentication), the billing address matched (AVS match), and there is a signed delivery confirmation on file. This is not a system error or fraud on our side — it is a standard 'friendly fraud' or genuine miscommunication dispute that the merchant can and should contest with evidence (a 'representment'), within the card network's 7-day response deadline. The merchant does not automatically lose the money; they have a real chance to win if they submit compelling evidence in time.",
+      "red_herring": "Ngozi's fear that they will 'automatically lose the money' suggests urgency to just refund and move on — but refunding preemptively forfeits a case they have strong evidence to win, and is not required or advisable given the 3DS pass and delivery confirmation.",
+      "tools": {
+        "customer_360": {
+          "profile": {
+            "name": "Bloom Home Decor (merchant account)",
+            "contact": "Ngozi Eze, Operations Manager",
+            "kyc_tier": "Merchant Tier 2",
+            "integration_age": "2 years",
+            "notes": "First chargeback in 6 months. Otherwise clean dispute history."
+          }
+        },
+        "chargeback_tool": {
+          "case": {
+            "case_id": "CB-77213",
+            "order_reference": "ORD-556812",
+            "amount_ngn": 85000,
+            "reason_code": "13.1",
+            "reason_label": "Merchandise/Services Not Received",
+            "deadline": "2026-09-02T23:59:00+01:00",
+            "days_remaining": 7,
+            "status": "AWAITING_MERCHANT_RESPONSE"
+          },
+          "representment_requirements": [
+            "Proof of delivery (signed note, courier tracking, or delivery photo)",
+            "3DS authentication result for the transaction",
+            "AVS match result",
+            "Any customer communication confirming receipt (if available)"
+          ]
+        },
+        "transaction_log": {
+          "columns": [
+            "reference",
+            "timestamp",
+            "amount_ngn",
+            "3ds_result",
+            "avs_result",
+            "status"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-772A01",
+              "timestamp": "2026-08-14T16:22:00+01:00",
+              "amount_ngn": 85000,
+              "3ds_result": "AUTHENTICATED (frictionless)",
+              "avs_result": "MATCH",
+              "status": "CAPTURED"
+            }
+          ]
+        },
+        "order_log": {
+          "order_reference": "ORD-556812",
+          "delivery_status": "DELIVERED",
+          "delivery_confirmation": {
+            "type": "Signed delivery note",
+            "signed_by": "O. Eze (recipient, matches billing name on file)",
+            "delivered_at": "2026-08-18T14:10:00+01:00",
+            "courier_tracking_id": "CRR-9981221"
+          }
+        },
+        "knowledge_base": [
+          {
+            "title": "Chargeback reason code 13.1: Item Not Received",
+            "body": "Merchants can contest 'item not received' disputes with delivery proof (signed note, courier tracking with delivery confirmation, or photo), plus 3DS authentication and AVS match results if available. Representment must be submitted before the deadline. Do not proactively refund before the deadline unless evidence is clearly insufficient — doing so forfeits a winnable case."
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "transactions",
+          "schema": [
+            "reference",
+            "timestamp",
+            "amount_ngn",
+            "3ds_result",
+            "avs_result",
+            "status"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-772A01",
+              "timestamp": "2026-08-14T16:22:00+01:00",
+              "amount_ngn": 85000,
+              "3ds_result": "AUTHENTICATED (frictionless)",
+              "avs_result": "MATCH",
+              "status": "CAPTURED"
+            }
+          ],
+          "suggested_queries": [
+            {
+              "query": "SELECT reference, 3ds_result, avs_result, status FROM transactions WHERE reference = 'TRX-772A01';",
+              "result_summary": "1 row: 3ds_result=AUTHENTICATED (frictionless), avs_result=MATCH, status=CAPTURED — this is the exact evidence bundle a representment needs, confirming it's not a system error or unauthorized charge."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Legitimate delivered sale with 3DS authentication and signed delivery proof; a standard contestable 'item not received' dispute, not an automatic loss.",
+          "correct": true
+        },
+        {
+          "text": "The transaction is fraudulent and the merchant should refund immediately.",
+          "correct": false
+        },
+        {
+          "text": "Our system mistakenly captured a payment that was never actually authorized.",
+          "correct": false
+        },
+        {
+          "text": "The delivery note is invalid because it doesn't match the cardholder's name exactly.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Submit a representment before the 7-day deadline including the signed delivery proof, 3DS authentication result, and AVS match; advise the merchant not to refund preemptively.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Advise the merchant to refund the customer right away to avoid any risk.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Tell the merchant nothing can be done and the chargeback will proceed automatically.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Submit the delivery note alone without mentioning 3DS or AVS results.",
+          "correct": false,
+          "quality": "acceptable_but_risky"
+        }
+      ],
+      "escalation": {
+        "required": false,
+        "target": null
+      },
+      "customer_expectation_timeframe": "Representment must be submitted within 7 days (by 2026-09-02); card network decision typically follows within 30-45 days after that",
+      "model_reply": "Hi Ngozi, good news — you are not automatically losing this money, and you have a strong case to contest it. Looking at order ORD-556812: the transaction was authenticated via 3D Secure, the billing address matched, and you have a signed delivery note from 18 August confirming receipt. This is a standard 'item not received' dispute, and merchants win these regularly when the evidence is this solid. I'd recommend submitting a representment with all three pieces of evidence (delivery proof, 3DS result, AVS match) before the deadline of 2 September — I can help you package that now. Please don't refund the customer in the meantime; doing so would close out a case you have a real chance of winning. I'll confirm once your representment is submitted, and let you know the network's decision timeline (usually 30-45 days after submission).",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Advised refunding as if the merchant has no case, or treated it as a system error.",
+          "1": "Recognized it's a legitimate sale but didn't cite the specific evidence (3DS, AVS, delivery proof).",
+          "2": "Cited some evidence but understated the merchant's chance of winning.",
+          "3": "Correctly frames this as a legitimate, well-evidenced sale and a standard contestable dispute, citing 3DS pass, AVS match, and signed delivery proof."
+        },
+        "tool_efficiency": {
+          "0": "Did not check the Chargeback tool or Order Log before responding.",
+          "1": "Checked Chargeback case details but not the Order Log delivery confirmation.",
+          "2": "Checked case + delivery info but not the Transaction Log's 3DS/AVS results.",
+          "3": "Checked Chargeback case (deadline, reason code), Transaction Log (3DS/AVS, confirmed via SQL lookup by reference), and Order Log (delivery proof) before advising."
+        },
+        "compliance_safety": {
+          "0": "Told the merchant the dispute is 'automatically theirs to lose' or guaranteed a win.",
+          "1": "Gave balanced framing but no mention of the deadline urgency.",
+          "2": "Mentioned the deadline but not the risk of preemptive refunding.",
+          "3": "Accurately frames this as winnable-but-not-guaranteed, states the deadline clearly, and warns against preemptive refunding."
+        },
+        "communication_clarity": {
+          "0": "Vague or unclear about what evidence to submit.",
+          "1": "Names required evidence but no deadline given.",
+          "2": "Names evidence and deadline but no reassurance addressing her fear of automatic loss.",
+          "3": "Directly addresses her fear (not automatic loss), lists exact evidence needed, states the deadline, and offers help packaging it."
+        },
+        "escalation_judgment": {
+          "0": "Escalated to Compliance/Fraud unnecessarily for a standard representment case.",
+          "1": "Unsure whether escalation was needed, hedged.",
+          "2": "Correctly did not escalate but gave no reasoning.",
+          "3": "Correctly resolved without escalation, recognizing this as standard merchant-support chargeback handling within existing tooling."
+        }
+      }
+    },
+    {
+      "id": "INC-2108",
+      "title": "Bill payment \"successful\" but airtime not received",
+      "track": "Payments",
+      "difficulty": "easy",
+      "channel": "USSD-linked chat",
+      "priority": "LOW",
+      "sla_minutes": 240,
+      "customer": {
+        "name": "Emeka Nwankwo",
+        "kyc_tier": "Tier 1",
+        "country": "Nigeria",
+        "rails": [
+          "Bill payment / airtime top-up via mobile money wallet"
+        ],
+        "account_summary": "Wallet 3 months old, first airtime purchase issue."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-30T20:05:00+01:00",
+          "text": "I bought NGN 2,000 airtime for my MTN line through your app. It said successful and took my money but I have not received any airtime. Please check, I need to make an urgent call."
+        }
+      ],
+      "hidden_root_cause": "Our system sent the airtime top-up request to the telco aggregator, which responded with HTTP 202 Accepted (meaning 'request received and queued for processing'), not confirmation of actual delivery. Our system incorrectly treated the 202 response as a final success and marked the transaction 'successful' and debited the customer immediately, instead of waiting for the aggregator's asynchronous delivery callback. The telco aggregator is separately experiencing a known incident where callbacks are delayed/not arriving, so the airtime was likely never actually delivered.",
+      "red_herring": "The app showing 'successful' makes it look like a straightforward failed-transaction refund case, but the deeper issue is a status-handling bug (treating 202 Accepted as final success) combined with an active aggregator incident — both should be understood, not just the individual transaction reversed.",
+      "tools": {
+        "transaction_log": {
+          "columns": [
+            "reference",
+            "timestamp",
+            "amount_ngn",
+            "product",
+            "vendor_status",
+            "app_displayed_status"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-661D02",
+              "timestamp": "2026-08-30T20:01:33+01:00",
+              "amount_ngn": 2000,
+              "product": "MTN Airtime",
+              "vendor_status": "ACCEPTED (202)",
+              "app_displayed_status": "Successful"
+            }
+          ],
+          "status_history": [
+            {
+              "timestamp": "2026-08-30T20:01:33+01:00",
+              "status": "REQUEST_SENT",
+              "note": "Airtime request sent to telco aggregator."
+            },
+            {
+              "timestamp": "2026-08-30T20:01:35+01:00",
+              "status": "VENDOR_202_ACCEPTED",
+              "note": "Aggregator returned 202 Accepted (queued, not yet delivered). App incorrectly displayed 'Successful' at this point."
+            },
+            {
+              "timestamp": "2026-08-30T20:01:35+01:00",
+              "status": "AWAITING_DELIVERY_CALLBACK",
+              "note": "No delivery callback received as of ticket time (20:05, ~3.5 minutes after the request — already past the normal 2-5 minute delivery-callback window, and the aggregator has had an active delay incident since 18:30)."
+            }
+          ]
+        },
+        "processor_status": {
+          "incidents": [
+            {
+              "partner": "Telco Airtime Aggregator (MTN corridor)",
+              "start": "2026-08-30T18:30:00+01:00",
+              "end": null,
+              "status": "DEGRADED",
+              "description": "Delivery callback delays affecting ~12% of requests since 18:30; aggregator has acknowledged, ETA for fix unknown."
+            }
+          ]
+        },
+        "knowledge_base": [
+          {
+            "title": "Vendor 202 Accepted vs. delivery confirmation",
+            "body": "A 202 Accepted response from a telco aggregator means the request was received, not that airtime was delivered. Final status must come from the delivery callback (DELIVERED or FAILED). If no callback arrives within the normal window (2-5 minutes) and there's a known aggregator incident, requery the vendor; if it confirms non-delivery, auto-reverse the customer's debit. This ticket should also be logged against the open aggregator incident rather than treated as an isolated bug."
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "transactions",
+          "schema": [
+            "reference",
+            "timestamp",
+            "amount_ngn",
+            "product",
+            "vendor_status",
+            "app_displayed_status"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-661D02",
+              "timestamp": "2026-08-30T20:01:33+01:00",
+              "amount_ngn": 2000,
+              "product": "MTN Airtime",
+              "vendor_status": "ACCEPTED (202)",
+              "app_displayed_status": "Successful"
+            }
+          ],
+          "suggested_queries": [
+            {
+              "query": "SELECT reference, vendor_status, app_displayed_status FROM transactions WHERE reference = 'TRX-661D02';",
+              "result_summary": "1 row: vendor_status='ACCEPTED (202)' but app_displayed_status='Successful' — confirms the app displayed a non-final vendor response as if it were a completed delivery."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Telco aggregator returned 202 Accepted (queued) but never sent a delivery confirmation; our system wrongly displayed this as 'Successful', and the aggregator has an active delivery-delay incident.",
+          "correct": true
+        },
+        {
+          "text": "The customer entered the wrong phone number for the top-up.",
+          "correct": false
+        },
+        {
+          "text": "MTN's network is completely down in the customer's area.",
+          "correct": false
+        },
+        {
+          "text": "The wallet balance was insufficient, so the debit silently failed.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Requery the vendor for final delivery status; if it confirms non-delivery, auto-reverse the NGN 2,000 debit, give a 2-hour expectation, and log this against the open aggregator incident.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Tell the customer to contact MTN directly since it's a network issue.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Refund immediately without requerying the vendor first.",
+          "correct": false,
+          "quality": "acceptable_but_risky"
+        },
+        {
+          "text": "Ask the customer to wait 24 hours with no explanation or interim status.",
+          "correct": false,
+          "quality": "wrong"
+        }
+      ],
+      "escalation": {
+        "required": false,
+        "target": "Attach to existing aggregator incident (no new escalation needed)"
+      },
+      "customer_expectation_timeframe": "Requery and refund-if-failed within 2 hours",
+      "model_reply": "Hi Emeka, sorry about this — I can see exactly what happened. Your NGN 2,000 request was sent and accepted by the network for processing, but the final delivery confirmation never came back, and there's a known delay affecting some MTN airtime top-ups tonight, which we're tracking. I'm requerying your specific transaction now; if it comes back as not delivered (which looks likely given the delay), I'll reverse the NGN 2,000 straight back to your wallet. You should see the outcome within 2 hours — I'll update you here as soon as I have it, no need to follow up in the meantime.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Blamed the customer (wrong number) or MTN's network broadly.",
+          "1": "Identified 'delivery failed' generically without citing the 202-vs-delivered distinction.",
+          "2": "Cited the 202 status issue but missed linking it to the active aggregator incident.",
+          "3": "Correctly explains the 202 Accepted-vs-delivered status confusion and links it to the known aggregator delay incident."
+        },
+        "tool_efficiency": {
+          "0": "Did not open Transaction Log or Processor Status before responding.",
+          "1": "Opened Transaction Log only.",
+          "2": "Checked Transaction Log and Processor Status but not the KB article on 202-handling policy.",
+          "3": "Checked Transaction Log (vendor_status vs displayed status, confirmed via SQL lookup by reference), Processor Status (incident), and the KB article on requery/reversal policy."
+        },
+        "compliance_safety": {
+          "0": "Promised airtime would definitely arrive without checking the callback status.",
+          "1": "Gave a vague 'we'll look into it' with no concrete mechanism.",
+          "2": "Explained the requery mechanism but gave an unrealistic (e.g., instant) timeframe.",
+          "3": "Explained the requery-then-reverse mechanism with a realistic 2-hour timeframe, no overpromising delivery."
+        },
+        "communication_clarity": {
+          "0": "Uses internal jargon (202, callback, vendor_status) directly with the customer.",
+          "1": "Plain language but no timeframe given.",
+          "2": "Plain language with timeframe but no acknowledgement of urgency (he needs to make a call).",
+          "3": "Plain language, acknowledges urgency, gives a concrete 2-hour timeframe, and sets expectation clearly."
+        },
+        "escalation_judgment": {
+          "0": "Escalated to a new team/incident when an existing aggregator incident already covers this.",
+          "1": "Unsure whether to escalate or attach to incident.",
+          "2": "Correctly attached to incident but didn't check if one already existed.",
+          "3": "Correctly identifies the existing aggregator incident and attaches this ticket to it rather than raising a new escalation."
+        }
+      }
+    },
+    {
+      "id": "INC-2109",
+      "title": "USD wallet funding not credited",
+      "track": "Wallets & Crypto",
+      "difficulty": "hard",
+      "channel": "email",
+      "priority": "HIGH",
+      "sla_minutes": 120,
+      "customer": {
+        "name": "Olamide Fashola",
+        "kyc_tier": "Tier 3 (full business verification)",
+        "country": "Nigeria",
+        "rails": [
+          "USD virtual account (international wire)"
+        ],
+        "account_summary": "Freelance consultant, USD virtual account opened 4 months ago for receiving payments from US/EU clients, 6 prior successful wire credits."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-29T09:30:00+01:00",
+          "text": "My US client wired $1,200 to my USD virtual account yesterday. He sent me a screenshot showing the wire as completed on his bank's side. But my wallet still shows $0 balance. This has happened before with other clients too but it always resolved within a day or two. This time it's been over 24 hours already with no update. Please help, I need to know if the money is safe."
+        }
+      ],
+      "hidden_root_cause": "The sender's bank populated the wire's payment reference field with the beneficiary's name ('Olamide Fashola') but omitted the actual USD virtual account number that our partner bank requires to auto-match the incoming wire to a specific customer wallet. As a result, the wire landed successfully at the partner bank but could not be automatically applied to Olamide's account; it is sitting in the partner bank's unapplied/suspense funds queue, awaiting manual matching. The money is not lost — it is with the partner bank, correctly received, just not yet routed to the right wallet.",
+      "red_herring": "Olamide's fear that 'the money is not safe' suggests something has gone wrong or been lost; the wire is fully intact and accounted for at the partner bank — the issue is a matching/routing gap, not a loss, fraud, or reversal.",
+      "tools": {
+        "customer_360": {
+          "profile": {
+            "name": "Olamide Fashola",
+            "kyc_tier": "Tier 3",
+            "country": "Nigeria",
+            "usd_virtual_account": {
+              "account_number": "8801234567",
+              "routing_number": "999999992",
+              "bank_name": "Meridian Trust Bank, N.A. (fictional partner bank; virtual account program)"
+            },
+            "member_since": "2026-04-15",
+            "prior_wire_credits": 6,
+            "notes": "No fraud flags. Two prior instances of delayed wire matching, both resolved within 48 hours after the sender's reference was corrected or manually matched."
+          }
+        },
+        "transaction_log": {
+          "columns": [
+            "reference",
+            "timestamp",
+            "amount_usd",
+            "type",
+            "status"
+          ],
+          "rows": [],
+          "note": "No inbound credit transaction exists yet for this expected wire — nothing to display because the funds have not been applied to the customer's ledger."
+        },
+        "partner_status": {
+          "queues": [
+            {
+              "queue_name": "Unapplied/Suspense Inbound Wires",
+              "entry": {
+                "amount_usd": 1200,
+                "received_date": "2026-08-28",
+                "sender_reference_field": "OLAMIDE FASHOLA",
+                "beneficiary_account_number_provided": "MISSING",
+                "matching_status": "AWAITING_MANUAL_MATCH",
+                "queue_position": 14
+              }
+            }
+          ]
+        },
+        "knowledge_base": [
+          {
+            "title": "Wire matching & suspense",
+            "body": "USD virtual account credits require the sender's bank to include the full virtual account number in the wire reference/OBI field. If only the beneficiary name is included, the partner bank cannot auto-match the wire to a specific customer and it lands in the unapplied/suspense queue. Support should request the sender's wire confirmation — for a domestic US wire (Fedwire), this is the Fed reference number (IMAD/OMAD) shown on the sender's bank receipt; for an international/correspondent-bank wire, it is the SWIFT MT103 reference — to raise a manual match request with the partner bank. Typical manual match resolution time: 1-2 business days. Always give the customer the correct wire instructions (full virtual account number + routing number in the reference field) to prevent recurrence."
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "transactions",
+          "schema": [
+            "reference",
+            "timestamp",
+            "amount_usd",
+            "type",
+            "status"
+          ],
+          "rows": [],
+          "suggested_queries": [
+            {
+              "query": "SELECT * FROM transactions WHERE type = 'usd_wire_credit' AND timestamp >= '2026-08-28T00:00:00+01:00';",
+              "result_summary": "0 rows returned for Olamide's account — confirms no inbound wire has ever been applied to his ledger. This does NOT mean the money is missing; it means the check needs to move to the partner bank's suspense queue (Partner Status tool), which is a separate system from our own transactions table."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Sender's bank left the virtual account number out of the wire reference field; funds landed correctly but sit unmatched in the partner bank's suspense queue.",
+          "correct": true
+        },
+        {
+          "text": "The wire was reversed by the sender's bank after being marked completed.",
+          "correct": false
+        },
+        {
+          "text": "Our system has a bug that is dropping all USD wallet credits.",
+          "correct": false
+        },
+        {
+          "text": "Olamide's account is under a compliance hold blocking incoming funds.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Ask Olamide for the sender's wire confirmation (Fed reference/IMAD number, since this was a domestic US wire), raise a manual match request with the partner bank, set a 1-2 business day expectation, and share the correct wire instructions for future payments.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Tell Olamide to ask his client to cancel and resend the wire.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Credit Olamide's wallet manually right now based on the client's screenshot alone, before confirming with the partner bank.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Tell Olamide there is nothing that can be done until his bank finds the money.",
+          "correct": false,
+          "quality": "wrong"
+        }
+      ],
+      "escalation": {
+        "required": true,
+        "target": "Treasury Ops (manual wire match with partner bank)",
+        "required_payload": [
+          "Transaction reference",
+          "Customer evidence (screenshot, doc)"
+        ]
+      },
+      "customer_expectation_timeframe": "Manual match resolution typically within 1-2 business days",
+      "model_reply": "Hi Olamide, thanks for reaching out, and I understand the concern — I can confirm your $1,200 is safe and accounted for; it's simply not routed to your wallet yet. What happened: your client's wire reference only included your name, not your full USD virtual account number, so our partner bank's system couldn't automatically match it to your account. It's currently sitting in their unapplied-funds queue, not lost or reversed. Could you ask your client for his bank's wire confirmation receipt — specifically the Fed reference number (sometimes labeled IMAD or OMAD, since this was a domestic US wire) — or send the same screenshot you mentioned if it shows that reference? I'll use that to raise a manual match request with our partner bank right away — this typically resolves within 1-2 business days. To avoid this happening again, please share these wire instructions with future senders: they should include your full virtual account number (8801234567) in the payment reference/OBI field, not just your name. I'll follow up here as soon as the match is confirmed.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Assumed the wire was reversed, lost, or blocked by a compliance hold.",
+          "1": "Identified 'a matching problem' generically without explaining the missing account number in the reference field.",
+          "2": "Identified the missing account number cause but didn't clarify the funds are safely held at the partner bank, not our system.",
+          "3": "Correctly explains that the sender's reference lacked the virtual account number, so funds sit safely in the partner bank's suspense queue awaiting manual match."
+        },
+        "tool_efficiency": {
+          "0": "Did not check Partner Status suspense queue before responding.",
+          "1": "Checked Transaction Log only (saw nothing) without checking Partner Status for the suspense entry.",
+          "2": "Checked Partner Status suspense queue but not the KB article on wire matching.",
+          "3": "Checked Transaction Log and ran the SQL query confirming zero rows for this expected wire (no ledger credit), checked Partner Status suspense queue (found the unapplied entry), and read the KB article on wire matching before diagnosing."
+        },
+        "compliance_safety": {
+          "0": "Manually credited the wallet based on a client screenshot without partner bank confirmation.",
+          "1": "Avoided crediting manually but gave no reasoning why that would be risky.",
+          "2": "Correctly avoided premature crediting but didn't clearly reassure the customer the funds are safe.",
+          "3": "Explicitly reassures the funds are safe/accounted-for without crediting prematurely, and explains the manual-match process instead."
+        },
+        "communication_clarity": {
+          "0": "Reply increases anxiety without directly answering 'is my money safe'.",
+          "1": "Reassures but gives no concrete next step or timeframe.",
+          "2": "Gives next step and timeframe but omits future-prevention guidance (correct wire instructions).",
+          "3": "Directly reassures the funds are safe, requests the needed document, gives a 1-2 day timeframe, and provides correct wire instructions to prevent recurrence."
+        },
+        "escalation_judgment": {
+          "0": "Did not escalate; tried to resolve without partner bank involvement.",
+          "1": "Escalated to the wrong team (e.g., Compliance or Payments Ops).",
+          "2": "Escalated to Treasury Ops but without specifying the manual-match action needed.",
+          "3": "Escalated to Treasury Ops specifically to raise the manual wire match with the partner bank, matching the ground truth."
+        }
+      }
+    },
+    {
+      "id": "INC-2110",
+      "title": "Crypto remittance: USDT sent, NGN not received (wrong network)",
+      "track": "Wallets & Crypto",
+      "difficulty": "hard",
+      "channel": "in-app chat",
+      "priority": "HIGH",
+      "sla_minutes": 60,
+      "customer": {
+        "name": "Chiamaka Obi",
+        "kyc_tier": "Tier 3",
+        "country": "Nigeria",
+        "rails": [
+          "USDT deposit (crypto-to-fiat remittance)"
+        ],
+        "account_summary": "Wallet 7 months old, regular crypto-to-NGN remittance user, ~2 conversions/month, first deposit issue."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-31T18:20:00+01:00",
+          "text": "I sent 500 USDT to the deposit address you gave me from my exchange 3 hours ago. The block explorer shows it as confirmed already. My NGN has still not arrived and my landlord is waiting for this rent money tonight. Please check now, this is urgent."
+        },
+        {
+          "from": "customer",
+          "timestamp": "2026-08-31T18:35:00+01:00",
+          "text": "Here is the transaction hash: 0x7a3f9e1c2b8d4a6f0e5c1b9d3a7f2e8c4b6d0a1f5e9c3b7d2a8f4e0c6b1d9a3f. My exchange withdrawal page says ERC20 I think, but let me double check."
+        }
+      ],
+      "hidden_root_cause": "Chiamaka's deposit address was issued for USDT on Ethereum (ERC-20). Her exchange processed the withdrawal on BNB Smart Chain (BEP-20) instead. Because both chains are EVM-compatible, the same 0x address exists on both, so the exchange accepted it without warning. Our chain listener only watches Ethereum for that address, so it never saw an inbound deposit. The 500 USDT is sitting at our address on BNB Chain, which we control the key for, but it needs a manual wrong-network recovery (sweep from BSC) rather than automatic crediting.",
+      "red_herring": "Chiamaka says the exchange showed 'ERC20', which would (if true) point to a listener bug on our side. The block explorer shows the transaction confirmed on BNB Smart Chain, not Ethereum. Always verify the network on the explorer, not from the customer's recollection. Note also that a 0x hash alone does NOT tell you which EVM chain was used; only the explorer network does.",
+      "tools": {
+        "crypto_deposit_monitor": {
+          "expected_deposit": {
+            "customer": "Chiamaka Obi",
+            "deposit_address": "0x9f3c7e1a2b8d4f6e0c5b1d9a3f7e2c8b4d6a0f1e",
+            "expected_network": "ERC-20 (Ethereum)",
+            "asset": "USDT"
+          },
+          "inbound_deposits_seen": [],
+          "note": "No inbound ERC-20 USDT deposits detected for this address in the last 24 hours (Ethereum listener healthy, last block indexed 2 minutes ago)."
+        },
+        "block_explorer_lookup": {
+          "tx_hash": "0x7a3f9e1c2b8d4a6f0e5c1b9d3a7f2e8c4b6d0a1f5e9c3b7d2a8f4e0c6b1d9a3f",
+          "network_detected": "BEP-20 (BNB Smart Chain)",
+          "token_contract": "0x55d398326f99059fF775485246999027B3197955 (USDT on BSC)",
+          "amount": "500 USDT",
+          "to_address": "0x9f3c7e1a2b8d4f6e0c5b1d9a3f7e2c8b4d6a0f1e (same address the customer was issued; it exists on every EVM chain)",
+          "confirmations": 892,
+          "status": "CONFIRMED",
+          "note": "Transaction is confirmed on BNB Smart Chain. The destination matches the customer's issued deposit address, but that address was issued for Ethereum (ERC-20). Same address, different chain: funds are on BSC, not Ethereum."
+        },
+        "knowledge_base": [
+          {
+            "title": "Wrong-network deposits: recovery policy & fee",
+            "body": "When a customer sends funds on a different network than the address was issued for (e.g. BEP-20 to an address issued for ERC-20), the deposit is not automatically detected or credited because our listener only watches the expected chain. For EVM-compatible chains (Ethereum, BNB Smart Chain, Polygon, Arbitrum) we control the same address on every chain, so a manual recovery is possible: confirm the tx hash and network on the block explorer, open a wrong-network recovery request with Crypto Ops, apply the standard recovery fee (covers manual sweep and gas), and expect 3-5 business days. Funds sent to a non-EVM chain we do not support (e.g. Tron when we only issued EVM addresses) may not be recoverable; escalate for case-by-case review. There is no instant NGN payout for wrong-network deposits. Educate the customer on selecting the correct network for future deposits. (Simulator content.)"
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "crypto_deposits",
+          "schema": [
+            "deposit_address",
+            "expected_network",
+            "asset",
+            "tx_hash",
+            "network_seen",
+            "amount",
+            "credited_at"
+          ],
+          "rows": [],
+          "suggested_queries": [
+            {
+              "query": "SELECT * FROM crypto_deposits WHERE deposit_address = '0x9f3c7e1a2b8d4f6e0c5b1d9a3f7e2c8b4d6a0f1e' AND expected_network = 'ERC-20';",
+              "result_summary": "0 rows returned — our listener has never recorded a credited ERC-20 deposit for this address. This confirms the listener isn't lying or broken; it genuinely never saw an Ethereum-network transaction here, because the funds moved on a different chain entirely. Next step is the Block Explorer lookup by tx hash, not assuming the funds are lost."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Customer sent USDT on BNB Smart Chain (BEP-20) to an address issued for Ethereum (ERC-20); the same 0x address exists on both chains, and our listener only monitors Ethereum for it.",
+          "correct": true
+        },
+        {
+          "text": "Our Ethereum (ERC-20) deposit listener is broken and missing legitimate deposits.",
+          "correct": false
+        },
+        {
+          "text": "The customer's exchange never actually sent the funds despite showing 'confirmed'.",
+          "correct": false
+        },
+        {
+          "text": "This is a scam address and the funds are gone permanently.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Confirm on the block explorer that the tx settled on BNB Smart Chain (not Ethereum), open a wrong-network recovery request with Crypto Ops (recovery fee applies, 3-5 business days), state clearly there is no instant NGN payout, and explain how to pick the correct network next time.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Credit her NGN balance immediately at the quoted rate since the deposit is 'confirmed' on the explorer.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Tell her the funds are permanently lost and nothing can be done.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Ask her to resend another 500 USDT on the correct network while we 'look into' the first one, with no clear recovery process stated.",
+          "correct": false,
+          "quality": "wrong"
+        }
+      ],
+      "escalation": {
+        "required": true,
+        "target": "Crypto Ops (wrong-network recovery request)",
+        "required_payload": [
+          "Tx hash / block explorer link",
+          "Network / rail name"
+        ]
+      },
+      "customer_expectation_timeframe": "3-5 business days for wrong-network recovery, once confirmed",
+      "model_reply": "Hi Chiamaka, thank you for the transaction hash, that helps a lot. I checked it on the block explorer and can see exactly what happened: your 500 USDT was sent on the BNB Smart Chain (BEP-20) network, but the deposit address we gave you is for Ethereum (ERC-20). Because the two networks share the same address format, your exchange accepted it without a warning, and our system only watches the Ethereum network for that address, so it never saw the deposit arrive. Your funds are not lost. They are sitting at our address on BNB Smart Chain and I am opening a wrong-network recovery request with our Crypto Ops team now. A standard recovery fee applies to cover the manual work and network fees, and recovery typically takes 3-5 business days. I know that is not what you want to hear with rent due tonight, but I would rather be upfront than promise something faster than we can deliver: there is no instant NGN payout for a wrong-network deposit. Going forward, please check that the network shown on your exchange's withdrawal screen matches the network we specify next to the deposit address (ERC-20 in this case) before you confirm. I will update you as soon as Crypto Ops confirms the recovery.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Assumed the funds are permanently lost or blamed a listener bug.",
+          "1": "Identified 'wrong network' generically without confirming the actual chain on the block explorer.",
+          "2": "Identified the network mismatch but didn't explain why our listener missed it (only monitors the expected network).",
+          "3": "Correctly identifies the BEP-20 vs ERC-20 mismatch using explorer evidence (network on which the tx confirmed), explains why the exchange accepted it (shared EVM address format) and why the listener missed it (only monitors Ethereum)."
+        },
+        "tool_efficiency": {
+          "0": "Did not check Crypto Deposit Monitor or Block Explorer before responding.",
+          "1": "Checked Crypto Deposit Monitor (saw nothing) without verifying the actual network via the block explorer.",
+          "2": "Checked the block explorer but did not read the wrong-network recovery KB article before proposing next steps.",
+          "3": "Checked Crypto Deposit Monitor (no inbound match, listener healthy, confirmed via the SQL query against crypto_deposits), Block Explorer (confirmed BNB Smart Chain), and the recovery-policy KB article before diagnosing and resolving."
+        },
+        "compliance_safety": {
+          "0": "Promised instant NGN credit for an unrecovered wrong-network deposit.",
+          "1": "Avoided instant credit but was vague about the fee or timeline.",
+          "2": "Named the fee and timeline but didn't clearly state no instant payout is possible.",
+          "3": "Clearly states no instant payout, discloses the recovery fee and 3-5 day timeline, and does not overpromise given the customer's urgency."
+        },
+        "communication_clarity": {
+          "0": "Uses purely technical language (contract addresses, hex formats) without a plain-language summary for the customer.",
+          "1": "Plain language but no clear timeframe.",
+          "2": "Gives a timeframe but no forward-looking education on network selection.",
+          "3": "Plain-language explanation of same-address/different-chain, honest about the timeline despite her urgency, and educates on checking network selection for future deposits."
+        },
+        "escalation_judgment": {
+          "0": "Did not escalate; tried to resolve without Crypto Ops involvement.",
+          "1": "Escalated to the wrong team (e.g., Payments Ops or Treasury Ops).",
+          "2": "Escalated to Crypto Ops but without specifying the wrong-network recovery request action.",
+          "3": "Escalated to Crypto Ops specifically to open a wrong-network recovery request, matching the ground truth."
+        }
+      }
+    },
+    {
+      "id": "INC-2111",
+      "title": "Crypto-to-fiat remittance: received less NGN than quoted",
+      "track": "Wallets & Crypto",
+      "difficulty": "medium",
+      "channel": "in-app chat",
+      "priority": "MEDIUM",
+      "sla_minutes": 120,
+      "customer": {
+        "name": "Segun Adeleke",
+        "kyc_tier": "Tier 3",
+        "country": "Nigeria",
+        "rails": [
+          "USDT-to-NGN remittance"
+        ],
+        "account_summary": "Wallet 10 months old, occasional crypto-to-NGN remittance, first pricing complaint."
+      },
+      "messages": [
+        {
+          "from": "customer",
+          "timestamp": "2026-08-27T14:50:00+01:00",
+          "text": "Your app quoted me NGN 1,650 per USDT. I sent 300 USDT and expected NGN 495,000, but I only got NGN 486,555. Where is my missing NGN 8,445? This looks like you shortchanged me."
+        }
+      ],
+      "hidden_root_cause": "The quote of NGN 1,650/USDT was locked for 15 minutes from creation (14:02 to 14:17). Segun's exchange withdrawal took 41 minutes to actually settle (a known exchange batching delay outside our control), so his deposit was confirmed at 14:43 — 26 minutes after the quote expired. Per policy, a deposit arriving after quote expiry is converted at the live market rate at time of execution, which had moved to NGN 1,630/USDT (a real, modest ~1.2% rate shift over 41 minutes, not an error). A standard 0.5% off-ramp fee then applies on top, which Segun did not account for in his own mental math. The NGN 8,445 gap reconciles exactly: rate slippage (300 USDT x (1,650 - 1,630) = NGN 6,000) plus the 0.5% off-ramp fee on the executed amount (0.5% x NGN 489,000 = NGN 2,445) = NGN 8,445.",
+      "red_herring": "Segun frames this as being 'shortchanged', implying a calculation error or unfair practice; the numbers are fully explained by disclosed, standard policy (quote expiry + off-ramp fee), not an error — the job is to show the math transparently, not to assume fault on either side.",
+      "tools": {
+        "transaction_log": {
+          "columns": [
+            "reference",
+            "event",
+            "timestamp",
+            "rate_ngn_per_usdt",
+            "amount_usdt",
+            "fee_pct",
+            "detail"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-QT88213",
+              "event": "quote_created",
+              "timestamp": "2026-08-27T14:02:00+01:00",
+              "rate_ngn_per_usdt": 1650,
+              "amount_usdt": null,
+              "fee_pct": null,
+              "detail": "Quote generated, valid 15 minutes."
+            },
+            {
+              "reference": "TRX-QT88213",
+              "event": "quote_expires",
+              "timestamp": "2026-08-27T14:17:00+01:00",
+              "rate_ngn_per_usdt": 1650,
+              "amount_usdt": null,
+              "fee_pct": null,
+              "detail": "Quote lock window closed, no deposit received yet."
+            },
+            {
+              "reference": "TRX-QT88213",
+              "event": "deposit_confirmed",
+              "timestamp": "2026-08-27T14:43:00+01:00",
+              "rate_ngn_per_usdt": null,
+              "amount_usdt": 300,
+              "fee_pct": null,
+              "detail": "300 USDT deposit confirmed on-chain, 26 minutes after quote expiry."
+            },
+            {
+              "reference": "TRX-QT88213",
+              "event": "converted_at_live_rate",
+              "timestamp": "2026-08-27T14:43:05+01:00",
+              "rate_ngn_per_usdt": 1630,
+              "amount_usdt": 300,
+              "fee_pct": 0.5,
+              "detail": "Executed at live rate (1,630) since quote had expired. Gross: NGN 489,000 before fee; 0.5% off-ramp fee (NGN 2,445) then deducted to reach the final payout of NGN 486,555."
+            }
+          ],
+          "payout_breakdown": {
+            "quoted_gross_ngn": 495000,
+            "gross_ngn_at_execution_rate": 489000,
+            "fee_percent": 0.5,
+            "fee_ngn": 2445,
+            "final_payout_ngn": 486555,
+            "shortfall_vs_quoted_ngn": 8445,
+            "note": "Shortfall reconciles exactly to the naira: rate difference (300 USDT x (1,650 - 1,630) = NGN 6,000) plus the 0.5% off-ramp fee on the executed amount (NGN 2,445) = NGN 8,445."
+          }
+        },
+        "rates_tool": {
+          "rate_history_window": [
+            {
+              "timestamp": "2026-08-27T14:00:00+01:00",
+              "rate_ngn_per_usdt": 1651
+            },
+            {
+              "timestamp": "2026-08-27T14:10:00+01:00",
+              "rate_ngn_per_usdt": 1645
+            },
+            {
+              "timestamp": "2026-08-27T14:17:00+01:00",
+              "rate_ngn_per_usdt": 1640
+            },
+            {
+              "timestamp": "2026-08-27T14:30:00+01:00",
+              "rate_ngn_per_usdt": 1636
+            },
+            {
+              "timestamp": "2026-08-27T14:43:00+01:00",
+              "rate_ngn_per_usdt": 1630
+            }
+          ],
+          "fee_schedule": {
+            "off_ramp_fee_pct": 0.5,
+            "applies_to": "All USDT-to-NGN conversions",
+            "disclosed_at_quote_time": true
+          }
+        },
+        "knowledge_base": [
+          {
+            "title": "Quote locks & rate slippage",
+            "body": "Quotes are locked for 15 minutes from creation. If the customer's deposit is not confirmed within that window, the conversion executes at the live market rate at the time of confirmation, not the originally quoted rate. This is disclosed in the quote terms. Exchange withdrawal delays (common due to batching or network congestion) are outside our control but are a frequent cause of missed quote windows. Support should show the customer the exact timestamps and rate history to build trust, and may offer a one-time goodwill fee waiver for a first-time occurrence if policy allows, but should not refund the rate difference itself."
+          }
+        ],
+        "sql_scratchpad": {
+          "table": "quotes",
+          "schema": [
+            "reference",
+            "event",
+            "timestamp",
+            "rate_ngn_per_usdt",
+            "amount_usdt",
+            "fee_pct"
+          ],
+          "rows": [
+            {
+              "reference": "TRX-QT88213",
+              "event": "quote_created",
+              "timestamp": "2026-08-27T14:02:00+01:00",
+              "rate_ngn_per_usdt": 1650,
+              "amount_usdt": null,
+              "fee_pct": null,
+              "detail": "Quote generated, valid 15 minutes."
+            },
+            {
+              "reference": "TRX-QT88213",
+              "event": "quote_expires",
+              "timestamp": "2026-08-27T14:17:00+01:00",
+              "rate_ngn_per_usdt": 1650,
+              "amount_usdt": null,
+              "fee_pct": null,
+              "detail": "Quote lock window closed, no deposit received yet."
+            },
+            {
+              "reference": "TRX-QT88213",
+              "event": "deposit_confirmed",
+              "timestamp": "2026-08-27T14:43:00+01:00",
+              "rate_ngn_per_usdt": null,
+              "amount_usdt": 300,
+              "fee_pct": null,
+              "detail": "300 USDT deposit confirmed on-chain, 26 minutes after quote expiry."
+            },
+            {
+              "reference": "TRX-QT88213",
+              "event": "converted_at_live_rate",
+              "timestamp": "2026-08-27T14:43:05+01:00",
+              "rate_ngn_per_usdt": 1630,
+              "amount_usdt": 300,
+              "fee_pct": 0.5,
+              "detail": "Executed at live rate (1,630) since quote had expired. Gross: NGN 489,000 before fee; 0.5% off-ramp fee (NGN 2,445) then deducted to reach the final payout of NGN 486,555."
+            }
+          ],
+          "suggested_queries": [
+            {
+              "query": "SELECT event, timestamp, rate_ngn_per_usdt FROM quotes WHERE reference = 'TRX-QT88213' ORDER BY timestamp;",
+              "result_summary": "4 rows showing quote_created (14:02, rate 1650), quote_expires (14:17), deposit_confirmed (14:43), converted_at_live_rate (14:43:05, rate 1630) — the 26-minute gap between quote_expires and deposit_confirmed is the entire story."
+            }
+          ]
+        }
+      },
+      "root_cause_options": [
+        {
+          "text": "Quote expired 26 minutes before the deposit confirmed (exchange withdrawal took 41 minutes); conversion executed at the live rate (1,630 vs quoted 1,650), plus the standard 0.5% off-ramp fee, together explaining the shortfall.",
+          "correct": true
+        },
+        {
+          "text": "Our system made a calculation error and shortchanged the customer.",
+          "correct": false
+        },
+        {
+          "text": "The customer sent less than 300 USDT despite claiming otherwise.",
+          "correct": false
+        },
+        {
+          "text": "A hidden fee was charged that is not disclosed anywhere in policy.",
+          "correct": false
+        }
+      ],
+      "resolution_options": [
+        {
+          "text": "Explain the timeline with exact timestamps (quote created, expired, deposit confirmed) and the two components (rate change + disclosed fee); no refund owed, but offer a one-time goodwill fee waiver if policy allows for a first occurrence.",
+          "correct": true,
+          "quality": "best"
+        },
+        {
+          "text": "Refund the full NGN 8,445 gap immediately as a customer service gesture with no explanation.",
+          "correct": false,
+          "quality": "acceptable_but_risky"
+        },
+        {
+          "text": "Tell the customer the app never guarantees quotes and end the conversation with no further detail.",
+          "correct": false,
+          "quality": "wrong"
+        },
+        {
+          "text": "Blame the customer's exchange entirely and offer no path forward or goodwill.",
+          "correct": false,
+          "quality": "wrong"
+        }
+      ],
+      "escalation": {
+        "required": false,
+        "target": null
+      },
+      "customer_expectation_timeframe": "Explanation immediate; goodwill fee waiver (if approved) processed same-day",
+      "model_reply": "Hi Segun, thanks for flagging this — let me walk you through exactly what happened, because the numbers do add up, just not the way you'd expect. Your quote of NGN 1,650/USDT was created at 14:02 and was only valid for 15 minutes (until 14:17). Your deposit didn't actually confirm on our end until 14:43 — it looks like your exchange's withdrawal took about 41 minutes to settle, which is outside either of our control but did push you past the quote window. Because the quote had expired, your 300 USDT converted at the live market rate at that moment, which had moved to NGN 1,630 — rates do shift even over 20-40 minutes. That rate difference is NGN 6,000 of the gap (300 USDT x NGN 20), with our standard 0.5% off-ramp fee (disclosed at quote time, NGN 2,445 on this amount) making up the rest — together that is your NGN 8,445. So nothing was miscalculated or hidden — the quote simply expired before your funds arrived. Since this is your first time hitting this, I can offer a one-time goodwill waiver of the 0.5% fee (NGN 2,445) for this transaction as a gesture; I don't have the ability to adjust for the rate movement itself since that's a live market rate at the time of execution. For future transfers, sending from a wallet or exchange with faster withdrawal settlement (or choosing a floating-rate order if your platform offers one) will help you lock in quoted rates more reliably.",
+      "rubric": {
+        "root_cause_accuracy": {
+          "0": "Assumed a calculation error or hidden fee.",
+          "1": "Identified 'the quote expired' generically without citing exact timestamps or the rate history.",
+          "2": "Cited timestamps and rate change but omitted the fee component, or vice versa.",
+          "3": "Correctly explains both components (quote expiry due to slow exchange withdrawal, resulting live-rate execution) and the disclosed 0.5% fee, with exact timestamps."
+        },
+        "tool_efficiency": {
+          "0": "Did not open Transaction Log or Rates tool before responding.",
+          "1": "Opened Transaction Log only, without checking the Rates tool's history for corroboration.",
+          "2": "Checked both but didn't reference the KB article on quote locks/slippage policy.",
+          "3": "Checked Transaction Log (quote/deposit timestamps, confirmed via the SQL query ordered by timestamp), Rates tool (rate history), and the KB article on quote-lock policy before explaining."
+        },
+        "compliance_safety": {
+          "0": "Refunded the rate difference outright, effectively guaranteeing quotes indefinitely (policy violation).",
+          "1": "Refused any goodwill gesture and offered nothing constructive.",
+          "2": "Offered a reasonable gesture but didn't clearly explain it does not cover the rate movement.",
+          "3": "Correctly declines to refund the rate-driven portion, offers a policy-compliant one-time fee waiver only, and is transparent about what is and isn't adjustable."
+        },
+        "communication_clarity": {
+          "0": "Reply is confusing or fails to show the actual math/timeline.",
+          "1": "Shows some numbers but no clear cause-and-effect narrative.",
+          "2": "Clear explanation but no forward-looking advice for future transfers.",
+          "3": "Clear, timestamped walkthrough of both cost components, plus practical advice to avoid recurrence (faster settlement / floating-rate option)."
+        },
+        "escalation_judgment": {
+          "0": "Escalated to Crypto Ops/Compliance unnecessarily for a routine, explainable pricing question.",
+          "1": "Unsure whether to escalate, hedged.",
+          "2": "Correctly did not escalate but gave no reasoning.",
+          "3": "Correctly resolved without escalation, recognizing this as a standard pricing-transparency case resolvable with existing tools and policy."
+        }
+      }
+    }
+  ]
+}

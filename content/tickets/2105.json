@@ -1,0 +1,263 @@
+{
+  "id": "INC-2105",
+  "title": "Merchant: webhooks not arriving since last night",
+  "track": "Merchant/API",
+  "difficulty": "hard",
+  "channel": "merchant support ticket",
+  "priority": "HIGH",
+  "sla_minutes": 60,
+  "customer": {
+    "name": "Bayo Ogunleye (Engineering Lead, Kaduna Fresh Foods e-commerce)",
+    "kyc_tier": "Merchant Tier 2 (verified business)",
+    "country": "Nigeria",
+    "rails": [
+      "Card + bank transfer checkout, webhook-driven order fulfillment"
+    ],
+    "account_summary": "Merchant integration live 11 months, ~4,000 orders/month, webhook-dependent order confirmation flow."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-31T08:50:00+01:00",
+      "text": "Since last night our orders are not being marked as paid in our system, but your merchant dashboard shows the payments as succeeded. This is causing real problems — customers are paying but not getting their order confirmations and our warehouse team isn't releasing shipments. Please check urgently, this is a B2B outage for us."
+    },
+    {
+      "from": "customer",
+      "timestamp": "2026-08-31T09:15:00+01:00",
+      "text": "We haven't changed anything on our end recently. Is this an outage on your side?"
+    }
+  ],
+  "hidden_root_cause": "The merchant's own infrastructure team rotated their server's TLS certificate at 22:10 the previous night, but the new certificate chain was installed without the required intermediate CA certificate. Our webhook sender performs full chain validation and now receives SSL_HANDSHAKE_FAILED on every delivery attempt to the merchant's endpoint. Retries are continuing on the standard 24-hour exponential backoff schedule (window opened 22:14 the previous night and closes 22:14 that night, roughly 13 hours after this ticket was raised), so the merchant has received zero of the 47 queued webhook notifications so far, even though the underlying payments are succeeding correctly on our side. Once the 24h window closes, no further automatic retries will happen — a manual replay after the merchant fixes the cert chain is required regardless.",
+  "red_herring": "The merchant states 'we haven't changed anything recently' and asks if it's our outage — this points suspicion at us, but Processor & Partner Status shows all systems green; the actual change (a cert rotation) may not have been visible to the person messaging us if it was done by a different sub-team overnight.",
+  "tools": {
+    "customer_360": {
+      "profile": {
+        "name": "Kaduna Fresh Foods (merchant account)",
+        "contact": "Bayo Ogunleye, Engineering Lead",
+        "kyc_tier": "Merchant Tier 2",
+        "integration_age": "11 months",
+        "monthly_volume": "~4,000 orders",
+        "notes": "No prior integration incidents. Webhook endpoint: https://api.kadunafreshfoods.com/webhooks/payments"
+      }
+    },
+    "merchant_api_console": {
+      "webhook_log": {
+        "columns": [
+          "timestamp",
+          "event_type",
+          "endpoint",
+          "http_status",
+          "error",
+          "attempt"
+        ],
+        "rows": [
+          {
+            "timestamp": "2026-08-30T22:14:02+01:00",
+            "event_type": "payment.succeeded",
+            "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+            "http_status": null,
+            "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+            "attempt": 1
+          },
+          {
+            "timestamp": "2026-08-30T22:19:02+01:00",
+            "event_type": "payment.succeeded",
+            "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+            "http_status": null,
+            "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+            "attempt": 2
+          },
+          {
+            "timestamp": "2026-08-30T23:04:02+01:00",
+            "event_type": "payment.succeeded",
+            "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+            "http_status": null,
+            "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+            "attempt": 5
+          },
+          {
+            "timestamp": "2026-08-31T08:40:11+01:00",
+            "event_type": "payment.succeeded",
+            "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+            "http_status": null,
+            "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+            "attempt": 14
+          },
+          {
+            "timestamp": "2026-08-31T09:14:02+01:00",
+            "event_type": "payment.succeeded",
+            "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+            "http_status": null,
+            "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+            "attempt": 15
+          }
+        ],
+        "summary": "100% delivery failure to this endpoint since 2026-08-30 22:14. 47 events queued, 0 delivered, retries continuing on the standard 24-hour exponential backoff schedule (window opened 22:14 last night, closes 22:14 tonight); after the window closes, retries stop automatically and a manual replay is required."
+      },
+      "curl_simulator_output": {
+        "command": "curl -vI https://api.kadunafreshfoods.com/webhooks/payments",
+        "output": "* Server certificate:\n*  subject: CN=api.kadunafreshfoods.com\n*  start date: Aug 30 22:00:00 2026 GMT\n*  expire date: Aug 30 22:00:00 2027 GMT\n*  issuer: CN=Intermediate CA (NOT PROVIDED IN CHAIN)\n* SSL certificate problem: unable to get local issuer certificate\n* Closing connection"
+      },
+      "key_management": {
+        "last_rotation": "2026-07-15",
+        "note": "API key rotation unrelated — no key changes in this window."
+      }
+    },
+    "processor_status": {
+      "incidents": [
+        {
+          "partner": "Core payment processing",
+          "status": "OPERATIONAL",
+          "description": "No incidents. All payment authorizations and captures succeeding normally."
+        }
+      ]
+    },
+    "knowledge_base": [
+      {
+        "title": "Webhook delivery failure: TLS chain errors",
+        "body": "SSL_HANDSHAKE_FAILED with 'unable to get local issuer certificate' means the destination server's TLS certificate chain is missing the intermediate CA. This is a merchant-side server config issue, not a payments outage. Advise the merchant to include the full certificate chain (leaf + intermediate) in their server config. Offer to replay failed webhooks for the affected window once fixed; recommend polling the Payments Status API as a stopgap."
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "webhook_events",
+      "schema": [
+        "timestamp",
+        "event_type",
+        "endpoint",
+        "http_status",
+        "error",
+        "attempt"
+      ],
+      "rows": [
+        {
+          "timestamp": "2026-08-30T22:14:02+01:00",
+          "event_type": "payment.succeeded",
+          "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+          "http_status": null,
+          "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+          "attempt": 1
+        },
+        {
+          "timestamp": "2026-08-30T22:19:02+01:00",
+          "event_type": "payment.succeeded",
+          "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+          "http_status": null,
+          "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+          "attempt": 2
+        },
+        {
+          "timestamp": "2026-08-30T23:04:02+01:00",
+          "event_type": "payment.succeeded",
+          "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+          "http_status": null,
+          "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+          "attempt": 5
+        },
+        {
+          "timestamp": "2026-08-31T08:40:11+01:00",
+          "event_type": "payment.succeeded",
+          "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+          "http_status": null,
+          "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+          "attempt": 14
+        },
+        {
+          "timestamp": "2026-08-31T09:14:02+01:00",
+          "event_type": "payment.succeeded",
+          "endpoint": "https://api.kadunafreshfoods.com/webhooks/payments",
+          "http_status": null,
+          "error": "SSL_HANDSHAKE_FAILED: unable to get local issuer certificate",
+          "attempt": 15
+        }
+      ],
+      "suggested_queries": [
+        {
+          "query": "SELECT error, COUNT(*) FROM webhook_events WHERE endpoint = 'https://api.kadunafreshfoods.com/webhooks/payments' GROUP BY error;",
+          "result_summary": "One error value across all rows: 'SSL_HANDSHAKE_FAILED: unable to get local issuer certificate' — 100% of attempts fail the same way, ruling out an intermittent network blip and pointing to a persistent cert-chain problem."
+        },
+        {
+          "query": "SELECT MIN(timestamp), MAX(attempt) FROM webhook_events WHERE endpoint = 'https://api.kadunafreshfoods.com/webhooks/payments';",
+          "result_summary": "First failure at 2026-08-30 22:14:02, most recent attempt #15 — confirms failures started exactly when the merchant's TLS cert was rotated overnight, and retries are still exhausting per the 24h backoff schedule."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Merchant's TLS certificate rotation last night is missing the intermediate CA in the chain; our webhook sender fails the handshake and cannot deliver, though payments themselves are succeeding.",
+      "correct": true
+    },
+    {
+      "text": "We are having a payments processing outage that is silently failing all transactions.",
+      "correct": false
+    },
+    {
+      "text": "The merchant's API key was revoked, blocking all outbound communication.",
+      "correct": false
+    },
+    {
+      "text": "Our webhook system has a bug that stopped sending events to all merchants globally.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Explain the TLS certificate chain issue is merchant-side, ask them to fix the chain (include intermediate CA), offer to replay the queued webhooks once fixed, and recommend polling the Payments Status API meanwhile.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Tell them it's likely a temporary issue on our side and to wait it out.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Manually mark all their pending orders as paid in their system on their behalf.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Regenerate their API keys as a first troubleshooting step.",
+      "correct": false,
+      "quality": "wrong"
+    }
+  ],
+  "escalation": {
+    "required": false,
+    "target": null
+  },
+  "customer_expectation_timeframe": "Immediate diagnosis; webhook replay available as soon as merchant confirms the cert chain fix",
+  "model_reply": "Hi Bayo, thanks for the detailed report — I've dug into this and can give you a clear answer. Your payments are processing successfully on our side (no outage here: Processor Status is fully green). The issue is that every webhook delivery attempt to your endpoint since 22:14 last night has failed with an SSL handshake error — specifically, the certificate chain your server is presenting is missing the intermediate CA certificate. This lines up with a TLS cert rotation timestamped last night on your endpoint, even if it wasn't visible on your side of the team. Once your infrastructure team adds the intermediate certificate to the chain (this is usually a one-line config fix, e.g. concatenating the full chain in your server config), deliveries should resume immediately. In the meantime: (1) I can replay all 47 queued webhook events for the affected window as soon as your endpoint is fixed — just confirm here and I'll trigger it, and (2) as a stopgap, you can poll our Payments Status API by order reference to confirm paid orders and release shipments without waiting on webhooks. Let me know once the cert is fixed and I'll replay immediately.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Concluded it was a payments outage on our side.",
+      "1": "Identified 'connection issue' generically without citing the SSL error.",
+      "2": "Cited SSL_HANDSHAKE_FAILED but didn't explain the missing intermediate CA / chain issue specifically.",
+      "3": "Correctly identifies the missing intermediate CA in the merchant's cert chain as the cause, distinct from any outage on our side."
+    },
+    "tool_efficiency": {
+      "0": "Did not open Webhook Log or the curl simulator.",
+      "1": "Opened Webhook Log but not the curl/API Console detail.",
+      "2": "Checked Webhook Log and curl output but not Processor Status to rule out an outage.",
+      "3": "Checked Webhook Log (100% failure pattern, confirmed via the SQL GROUP BY error query), curl simulator output (chain error detail), and Processor Status (confirmed no outage) before diagnosing."
+    },
+    "compliance_safety": {
+      "0": "Claimed responsibility for a bug on our side that doesn't exist, or promised to mark their orders paid manually (bypassing their own system integrity).",
+      "1": "Avoided false blame but didn't clearly state the issue is merchant-side.",
+      "2": "Stated it's merchant-side but didn't offer a safe stopgap.",
+      "3": "Clearly attributes the issue to the merchant's cert chain without over-claiming, and offers a safe stopgap (polling) rather than manually altering their order data."
+    },
+    "communication_clarity": {
+      "0": "Response is overly technical jargon dump with no plain-language framing, or dismissive of the B2B urgency.",
+      "1": "Plain language but no concrete next step for the merchant's engineers.",
+      "2": "Gives next steps but no replay offer or stopgap.",
+      "3": "Explains cause in accessible technical terms suitable for an engineer, offers webhook replay, and gives a stopgap (API polling) for the interim."
+    },
+    "escalation_judgment": {
+      "0": "Escalated to Payments Ops for what is a merchant-side config issue.",
+      "1": "Unsure whether to escalate, hedged.",
+      "2": "Correctly did not escalate but no reasoning given.",
+      "3": "Correctly resolved without escalation since root cause and fix are both on the merchant's side; support's job is diagnosis + replay offer."
+    }
+  }
+}

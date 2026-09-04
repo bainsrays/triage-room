@@ -1,0 +1,241 @@
+{
+  "id": "INC-2102",
+  "title": "Debited twice for one payment at the pharmacy",
+  "track": "Payments",
+  "difficulty": "medium",
+  "channel": "email",
+  "priority": "HIGH",
+  "sla_minutes": 120,
+  "customer": {
+    "name": "Tunde Balogun",
+    "kyc_tier": "Tier 1",
+    "country": "Nigeria",
+    "rails": [
+      "Card (POS terminal)"
+    ],
+    "account_summary": "Debit card linked to wallet, active 8 months, no prior disputes."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-29T11:05:00+01:00",
+      "text": "I paid NGN 12,500 at MedPlus pharmacy on Allen Avenue this morning with my card linked to your app. I only bought one thing but my transaction history shows two debits of NGN 12,500 each, one after the other. The pharmacy only gave me one receipt. Please refund the extra one, this is not fair."
+    }
+  ],
+  "hidden_root_cause": "The POS terminal timed out waiting for an authorization response after the first swipe. The cashier retried the transaction on the same terminal. Both authorizations actually reached the acquirer and were captured; the acquirer's dedupe logic (which should void a repeated auth within a short window on the same card/terminal/amount) failed to fire, so both were captured as separate, valid debits instead of the first being auto-reversed.",
+  "red_herring": "The two transactions have different retrieval reference numbers, which can look like 'two separate legitimate purchases' at a glance — different refs are actually expected for two separate authorizations and does not rule out duplicate-charge; the real tell is same merchant, same amount, seconds apart.",
+  "tools": {
+    "customer_360": {
+      "profile": {
+        "name": "Tunde Balogun",
+        "kyc_tier": "Tier 1",
+        "country": "Nigeria",
+        "wallet_id": "WAL-51044",
+        "member_since": "2026-01-02",
+        "recent_tickets": [
+          "None"
+        ],
+        "notes": "No fraud flags."
+      }
+    },
+    "transaction_log": {
+      "columns": [
+        "reference",
+        "retrieval_ref",
+        "timestamp",
+        "amount_ngn",
+        "merchant",
+        "mcc",
+        "channel",
+        "status",
+        "auth_code"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-A014C2",
+          "retrieval_ref": "RRN-220819331044",
+          "timestamp": "2026-08-29T09:12:03+01:00",
+          "amount_ngn": 12500,
+          "merchant": "MedPlus Pharmacy - Allen Ave",
+          "mcc": "5912",
+          "channel": "POS",
+          "status": "CAPTURED",
+          "auth_code": "A1B2C3"
+        },
+        {
+          "reference": "TRX-A014C9",
+          "retrieval_ref": "RRN-220819331091",
+          "timestamp": "2026-08-29T09:12:50+01:00",
+          "amount_ngn": 12500,
+          "merchant": "MedPlus Pharmacy - Allen Ave",
+          "mcc": "5912",
+          "channel": "POS",
+          "status": "CAPTURED",
+          "auth_code": "A1B2D7"
+        }
+      ],
+      "status_history": [
+        {
+          "timestamp": "2026-08-29T09:12:03+01:00",
+          "status": "AUTH_REQUESTED",
+          "note": "First swipe, terminal ID TML-7729"
+        },
+        {
+          "timestamp": "2026-08-29T09:12:34+01:00",
+          "status": "TIMEOUT_AT_TERMINAL",
+          "note": "Terminal did not receive auth response within 30s window (auth had actually succeeded upstream at 09:12:09)"
+        },
+        {
+          "timestamp": "2026-08-29T09:12:50+01:00",
+          "status": "AUTH_REQUESTED_RETRY",
+          "note": "Second swipe, same terminal ID TML-7729, same amount"
+        },
+        {
+          "timestamp": "2026-08-29T09:12:55+01:00",
+          "status": "CAPTURED",
+          "note": "Both auths captured; dedupe rule (same card+terminal+amount within 120s) did not trigger a void on the first."
+        }
+      ]
+    },
+    "chargeback_tool": {
+      "eligibility_check": {
+        "reference": "TRX-A014C9",
+        "reason_code": "4834",
+        "reason_label": "Duplicate Processing",
+        "eligible": true,
+        "evidence_required": [
+          "Two auths, same card, same merchant, same amount, within short window",
+          "Customer statement of single purchase",
+          "Single pharmacy receipt"
+        ],
+        "deadline_days": 120
+      }
+    },
+    "sql_scratchpad": {
+      "table": "transactions",
+      "schema": [
+        "reference",
+        "retrieval_ref",
+        "timestamp",
+        "amount_ngn",
+        "merchant",
+        "mcc",
+        "channel",
+        "status",
+        "auth_code"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-A014C2",
+          "retrieval_ref": "RRN-220819331044",
+          "timestamp": "2026-08-29T09:12:03+01:00",
+          "amount_ngn": 12500,
+          "merchant": "MedPlus Pharmacy - Allen Ave",
+          "mcc": "5912",
+          "channel": "POS",
+          "status": "CAPTURED",
+          "auth_code": "A1B2C3"
+        },
+        {
+          "reference": "TRX-A014C9",
+          "retrieval_ref": "RRN-220819331091",
+          "timestamp": "2026-08-29T09:12:50+01:00",
+          "amount_ngn": 12500,
+          "merchant": "MedPlus Pharmacy - Allen Ave",
+          "mcc": "5912",
+          "channel": "POS",
+          "status": "CAPTURED",
+          "auth_code": "A1B2D7"
+        }
+      ],
+      "suggested_queries": [
+        {
+          "query": "SELECT reference, retrieval_ref, timestamp, amount_ngn, auth_code FROM transactions WHERE merchant = 'MedPlus Pharmacy - Allen Ave' ORDER BY timestamp;",
+          "result_summary": "Returns 2 rows, same merchant/amount, 47 seconds apart, two different auth_codes (A1B2C3, A1B2D7) — two genuine, separately-captured authorizations, not a display glitch."
+        },
+        {
+          "query": "SELECT COUNT(*), SUM(amount_ngn) FROM transactions WHERE merchant = 'MedPlus Pharmacy - Allen Ave' AND timestamp BETWEEN '2026-08-29T09:12:00+01:00' AND '2026-08-29T09:13:00+01:00';",
+          "result_summary": "COUNT=2, SUM=25000 — confirms exactly one extra NGN 12,500 capture within a 1-minute window, which is what the chargeback should target."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "POS retry after a terminal timeout led to two separate captures because the dedupe/void logic did not fire on the first auth.",
+      "correct": true
+    },
+    {
+      "text": "The customer actually bought two items and forgot the second purchase.",
+      "correct": false
+    },
+    {
+      "text": "Card was compromised and used fraudulently at a different location.",
+      "correct": false
+    },
+    {
+      "text": "The pharmacy manually re-keyed the transaction the next day, causing a second charge.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Raise a duplicate-transaction chargeback (reason code 4834) on TRX-A014C9, explain the 5-7 business day refund timeline, no escalation needed.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Refund instantly from the wallet balance without filing a chargeback, absorbing the cost silently.",
+      "correct": false,
+      "quality": "acceptable_but_risky"
+    },
+    {
+      "text": "Tell the customer to dispute directly with the pharmacy since it's their terminal.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Deny the refund because both transactions show status CAPTURED and have different retrieval refs.",
+      "correct": false,
+      "quality": "wrong"
+    }
+  ],
+  "escalation": {
+    "required": false,
+    "target": null
+  },
+  "customer_expectation_timeframe": "5-7 business days for the chargeback refund to land",
+  "model_reply": "Hi Tunde, thanks for flagging this and sorry for the trouble. I checked your account and can confirm what happened: the terminal timed out after your first swipe at MedPlus, so it was retried — but both attempts actually went through on our end, which is why you were charged twice for one purchase. I've filed a duplicate-transaction dispute for the second charge of NGN 12,500 (reference TRX-A014C9). You don't need to do anything else on your side; the refund should land back on your card within 5-7 business days. I'll update you here once it's confirmed.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Concluded it was fraud or a genuine second purchase.",
+      "1": "Identified 'duplicate charge' without explaining the terminal timeout/retry mechanism.",
+      "2": "Identified the timeout+retry mechanism but not that dedupe/void logic was what failed.",
+      "3": "Correctly explains the terminal timeout, the retry, and that dedupe/void logic failed to reverse the first auth, resulting in two valid captures."
+    },
+    "tool_efficiency": {
+      "0": "Did not open Transaction Log before deciding.",
+      "1": "Opened Transaction Log but ignored timestamps/retrieval refs.",
+      "2": "Compared the two transactions but didn't check chargeback eligibility before proposing a fix.",
+      "3": "Compared timestamps, amounts, and merchant on both rows (via table view or the SQL query grouping by merchant/time window), then checked chargeback eligibility/reason code before resolving."
+    },
+    "compliance_safety": {
+      "0": "Promised an instant refund with a specific guaranteed date, or shared full card number in the reply.",
+      "1": "Vague refund promise with no process named.",
+      "2": "Named the chargeback process but no realistic timeframe.",
+      "3": "Named the correct process (duplicate chargeback, reason code) with a realistic 5-7 day timeframe and no over-promising."
+    },
+    "communication_clarity": {
+      "0": "Blames the customer or the pharmacy for the error.",
+      "1": "Plain language but no clear next step.",
+      "2": "Clear next step but no timeframe.",
+      "3": "Clear, blame-free explanation, concrete next step (dispute filed), and realistic timeframe."
+    },
+    "escalation_judgment": {
+      "0": "Escalated to a team when this is a standard, self-resolvable chargeback process.",
+      "1": "Unsure/left escalation ambiguous.",
+      "2": "Correctly did not escalate but gave no reasoning.",
+      "3": "Correctly recognized this as standard process (no escalation needed) since chargeback tooling covers it directly."
+    }
+  }
+}

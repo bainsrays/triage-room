@@ -1,0 +1,38 @@
+import { chromium } from "playwright";
+const BASE = "http://localhost:4179";
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+page.on("dialog", (d) => d.accept());
+await page.goto(`${BASE}/ticket/INC-2110`, { waitUntil: "networkidle" });
+await page.getByRole("button", { name: /open scratchpad/i }).click();
+await page.waitForTimeout(500);
+const pre = await page.locator("body").innerText();
+const leak1 = /senior investigator|suggested quer|funds moved on a different chain/i.test(pre);
+const leak2 = /3-5 business days for wrong-network recovery, once confirmed/i.test(pre);
+console.log("PRE-SUBMIT leak (sql hints):", leak1, "| leak (expected timeframe):", leak2);
+await page.screenshot({ path: "qa/hostile/pre-submit-2110.png", fullPage: true });
+// complete it properly with tools opened
+const tabs = page.getByRole("tab");
+for (let i = 0; i < (await tabs.count()); i++) { await tabs.nth(i).click(); await page.waitForTimeout(150); }
+await page.locator('input[name="root-cause"]').nth(0).click();
+await page.locator('input[name="resolution"]').nth(0).click();
+await page.getByRole("button", { name: /escalate this ticket/i }).click();
+await page.getByLabel(/route to team/i).selectOption({ label: "Crypto Ops" });
+await page.getByLabel("Tx hash / block explorer link").check();
+await page.getByLabel("Network / rail name").check();
+await page.locator("#reply-editor").fill("Hi Chiamaka, thank you for the transaction hash. I checked it on the block explorer: your 500 USDT was sent on BNB Smart Chain, but the address we issued is for Ethereum, so our system never saw the deposit. Your funds are not lost. I have opened a wrong-network recovery request with Crypto Ops; recovery typically completes within 3-5 business days once confirmed, and the NGN payout is calculated at the rate on the day the sweep lands, with a standard recovery fee. Please do not send anything further to that address. I will update you as soon as Crypto Ops confirms.");
+await page.getByRole("button", { name: /submit ticket/i }).click();
+await page.waitForURL(/\/score/);
+await page.waitForTimeout(400);
+const score = (await page.locator("body").innerText()).match(/(\d{1,3})\s*\n?\s*out of 100/i);
+console.log("Full-evidence run score:", score ? score[1] : "?"); const why = await page.locator("body").innerText(); const i = why.indexOf("Why you scored"); console.log(why.slice(i, i+2500));
+await page.screenshot({ path: "qa/hostile/score-2110-full.png", fullPage: true });
+await browser.close(); process.exit(0);
+await page.goto(`${BASE}/ticket/INC-2110`, { waitUntil: "networkidle" });
+const sp = page.getByRole("button", { name: /open scratchpad/i });
+if (await sp.count()) await sp.click();
+await page.waitForTimeout(500);
+const post = await page.locator("body").innerText();
+console.log("POST-SUBMIT reveal (sql hints):", /senior investigator/i.test(post), "| expected timeframe shown:", /Expected customer timeframe/i.test(post));
+await page.screenshot({ path: "qa/hostile/post-submit-2110.png", fullPage: true });
+await browser.close();

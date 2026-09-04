@@ -1,0 +1,175 @@
+{
+  "id": "INC-2109",
+  "title": "USD wallet funding not credited",
+  "track": "Wallets & Crypto",
+  "difficulty": "hard",
+  "channel": "email",
+  "priority": "HIGH",
+  "sla_minutes": 120,
+  "customer": {
+    "name": "Olamide Fashola",
+    "kyc_tier": "Tier 3 (full business verification)",
+    "country": "Nigeria",
+    "rails": [
+      "USD virtual account (international wire)"
+    ],
+    "account_summary": "Freelance consultant, USD virtual account opened 4 months ago for receiving payments from US/EU clients, 6 prior successful wire credits."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-29T09:30:00+01:00",
+      "text": "My US client wired $1,200 to my USD virtual account yesterday. He sent me a screenshot showing the wire as completed on his bank's side. But my wallet still shows $0 balance. This has happened before with other clients too but it always resolved within a day or two. This time it's been over 24 hours already with no update. Please help, I need to know if the money is safe."
+    }
+  ],
+  "hidden_root_cause": "The sender's bank populated the wire's payment reference field with the beneficiary's name ('Olamide Fashola') but omitted the actual USD virtual account number that our partner bank requires to auto-match the incoming wire to a specific customer wallet. As a result, the wire landed successfully at the partner bank but could not be automatically applied to Olamide's account; it is sitting in the partner bank's unapplied/suspense funds queue, awaiting manual matching. The money is not lost — it is with the partner bank, correctly received, just not yet routed to the right wallet.",
+  "red_herring": "Olamide's fear that 'the money is not safe' suggests something has gone wrong or been lost; the wire is fully intact and accounted for at the partner bank — the issue is a matching/routing gap, not a loss, fraud, or reversal.",
+  "tools": {
+    "customer_360": {
+      "profile": {
+        "name": "Olamide Fashola",
+        "kyc_tier": "Tier 3",
+        "country": "Nigeria",
+        "usd_virtual_account": {
+          "account_number": "8801234567",
+          "routing_number": "999999992",
+          "bank_name": "Meridian Trust Bank, N.A. (fictional partner bank; virtual account program)"
+        },
+        "member_since": "2026-04-15",
+        "prior_wire_credits": 6,
+        "notes": "No fraud flags. Two prior instances of delayed wire matching, both resolved within 48 hours after the sender's reference was corrected or manually matched."
+      }
+    },
+    "transaction_log": {
+      "columns": [
+        "reference",
+        "timestamp",
+        "amount_usd",
+        "type",
+        "status"
+      ],
+      "rows": [],
+      "note": "No inbound credit transaction exists yet for this expected wire — nothing to display because the funds have not been applied to the customer's ledger."
+    },
+    "partner_status": {
+      "queues": [
+        {
+          "queue_name": "Unapplied/Suspense Inbound Wires",
+          "entry": {
+            "amount_usd": 1200,
+            "received_date": "2026-08-28",
+            "sender_reference_field": "OLAMIDE FASHOLA",
+            "beneficiary_account_number_provided": "MISSING",
+            "matching_status": "AWAITING_MANUAL_MATCH",
+            "queue_position": 14
+          }
+        }
+      ]
+    },
+    "knowledge_base": [
+      {
+        "title": "Wire matching & suspense",
+        "body": "USD virtual account credits require the sender's bank to include the full virtual account number in the wire reference/OBI field. If only the beneficiary name is included, the partner bank cannot auto-match the wire to a specific customer and it lands in the unapplied/suspense queue. Support should request the sender's wire confirmation — for a domestic US wire (Fedwire), this is the Fed reference number (IMAD/OMAD) shown on the sender's bank receipt; for an international/correspondent-bank wire, it is the SWIFT MT103 reference — to raise a manual match request with the partner bank. Typical manual match resolution time: 1-2 business days. Always give the customer the correct wire instructions (full virtual account number + routing number in the reference field) to prevent recurrence."
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "transactions",
+      "schema": [
+        "reference",
+        "timestamp",
+        "amount_usd",
+        "type",
+        "status"
+      ],
+      "rows": [],
+      "suggested_queries": [
+        {
+          "query": "SELECT * FROM transactions WHERE type = 'usd_wire_credit' AND timestamp >= '2026-08-28T00:00:00+01:00';",
+          "result_summary": "0 rows returned for Olamide's account — confirms no inbound wire has ever been applied to his ledger. This does NOT mean the money is missing; it means the check needs to move to the partner bank's suspense queue (Partner Status tool), which is a separate system from our own transactions table."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Sender's bank left the virtual account number out of the wire reference field; funds landed correctly but sit unmatched in the partner bank's suspense queue.",
+      "correct": true
+    },
+    {
+      "text": "The wire was reversed by the sender's bank after being marked completed.",
+      "correct": false
+    },
+    {
+      "text": "Our system has a bug that is dropping all USD wallet credits.",
+      "correct": false
+    },
+    {
+      "text": "Olamide's account is under a compliance hold blocking incoming funds.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Ask Olamide for the sender's wire confirmation (Fed reference/IMAD number, since this was a domestic US wire), raise a manual match request with the partner bank, set a 1-2 business day expectation, and share the correct wire instructions for future payments.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Tell Olamide to ask his client to cancel and resend the wire.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Credit Olamide's wallet manually right now based on the client's screenshot alone, before confirming with the partner bank.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Tell Olamide there is nothing that can be done until his bank finds the money.",
+      "correct": false,
+      "quality": "wrong"
+    }
+  ],
+  "escalation": {
+    "required": true,
+    "target": "Treasury Ops (manual wire match with partner bank)",
+    "required_payload": [
+      "Transaction reference",
+      "Customer evidence (screenshot, doc)"
+    ]
+  },
+  "customer_expectation_timeframe": "Manual match resolution typically within 1-2 business days",
+  "model_reply": "Hi Olamide, thanks for reaching out, and I understand the concern — I can confirm your $1,200 is safe and accounted for; it's simply not routed to your wallet yet. What happened: your client's wire reference only included your name, not your full USD virtual account number, so our partner bank's system couldn't automatically match it to your account. It's currently sitting in their unapplied-funds queue, not lost or reversed. Could you ask your client for his bank's wire confirmation receipt — specifically the Fed reference number (sometimes labeled IMAD or OMAD, since this was a domestic US wire) — or send the same screenshot you mentioned if it shows that reference? I'll use that to raise a manual match request with our partner bank right away — this typically resolves within 1-2 business days. To avoid this happening again, please share these wire instructions with future senders: they should include your full virtual account number (8801234567) in the payment reference/OBI field, not just your name. I'll follow up here as soon as the match is confirmed.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Assumed the wire was reversed, lost, or blocked by a compliance hold.",
+      "1": "Identified 'a matching problem' generically without explaining the missing account number in the reference field.",
+      "2": "Identified the missing account number cause but didn't clarify the funds are safely held at the partner bank, not our system.",
+      "3": "Correctly explains that the sender's reference lacked the virtual account number, so funds sit safely in the partner bank's suspense queue awaiting manual match."
+    },
+    "tool_efficiency": {
+      "0": "Did not check Partner Status suspense queue before responding.",
+      "1": "Checked Transaction Log only (saw nothing) without checking Partner Status for the suspense entry.",
+      "2": "Checked Partner Status suspense queue but not the KB article on wire matching.",
+      "3": "Checked Transaction Log and ran the SQL query confirming zero rows for this expected wire (no ledger credit), checked Partner Status suspense queue (found the unapplied entry), and read the KB article on wire matching before diagnosing."
+    },
+    "compliance_safety": {
+      "0": "Manually credited the wallet based on a client screenshot without partner bank confirmation.",
+      "1": "Avoided crediting manually but gave no reasoning why that would be risky.",
+      "2": "Correctly avoided premature crediting but didn't clearly reassure the customer the funds are safe.",
+      "3": "Explicitly reassures the funds are safe/accounted-for without crediting prematurely, and explains the manual-match process instead."
+    },
+    "communication_clarity": {
+      "0": "Reply increases anxiety without directly answering 'is my money safe'.",
+      "1": "Reassures but gives no concrete next step or timeframe.",
+      "2": "Gives next step and timeframe but omits future-prevention guidance (correct wire instructions).",
+      "3": "Directly reassures the funds are safe, requests the needed document, gives a 1-2 day timeframe, and provides correct wire instructions to prevent recurrence."
+    },
+    "escalation_judgment": {
+      "0": "Did not escalate; tried to resolve without partner bank involvement.",
+      "1": "Escalated to the wrong team (e.g., Compliance or Payments Ops).",
+      "2": "Escalated to Treasury Ops but without specifying the manual-match action needed.",
+      "3": "Escalated to Treasury Ops specifically to raise the manual wire match with the partner bank, matching the ground truth."
+    }
+  }
+}

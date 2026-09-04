@@ -1,0 +1,188 @@
+{
+  "id": "INC-2108",
+  "title": "Bill payment \"successful\" but airtime not received",
+  "track": "Payments",
+  "difficulty": "easy",
+  "channel": "USSD-linked chat",
+  "priority": "LOW",
+  "sla_minutes": 240,
+  "customer": {
+    "name": "Emeka Nwankwo",
+    "kyc_tier": "Tier 1",
+    "country": "Nigeria",
+    "rails": [
+      "Bill payment / airtime top-up via mobile money wallet"
+    ],
+    "account_summary": "Wallet 3 months old, first airtime purchase issue."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-30T20:05:00+01:00",
+      "text": "I bought NGN 2,000 airtime for my MTN line through your app. It said successful and took my money but I have not received any airtime. Please check, I need to make an urgent call."
+    }
+  ],
+  "hidden_root_cause": "Our system sent the airtime top-up request to the telco aggregator, which responded with HTTP 202 Accepted (meaning 'request received and queued for processing'), not confirmation of actual delivery. Our system incorrectly treated the 202 response as a final success and marked the transaction 'successful' and debited the customer immediately, instead of waiting for the aggregator's asynchronous delivery callback. The telco aggregator is separately experiencing a known incident where callbacks are delayed/not arriving, so the airtime was likely never actually delivered.",
+  "red_herring": "The app showing 'successful' makes it look like a straightforward failed-transaction refund case, but the deeper issue is a status-handling bug (treating 202 Accepted as final success) combined with an active aggregator incident — both should be understood, not just the individual transaction reversed.",
+  "tools": {
+    "transaction_log": {
+      "columns": [
+        "reference",
+        "timestamp",
+        "amount_ngn",
+        "product",
+        "vendor_status",
+        "app_displayed_status"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-661D02",
+          "timestamp": "2026-08-30T20:01:33+01:00",
+          "amount_ngn": 2000,
+          "product": "MTN Airtime",
+          "vendor_status": "ACCEPTED (202)",
+          "app_displayed_status": "Successful"
+        }
+      ],
+      "status_history": [
+        {
+          "timestamp": "2026-08-30T20:01:33+01:00",
+          "status": "REQUEST_SENT",
+          "note": "Airtime request sent to telco aggregator."
+        },
+        {
+          "timestamp": "2026-08-30T20:01:35+01:00",
+          "status": "VENDOR_202_ACCEPTED",
+          "note": "Aggregator returned 202 Accepted (queued, not yet delivered). App incorrectly displayed 'Successful' at this point."
+        },
+        {
+          "timestamp": "2026-08-30T20:01:35+01:00",
+          "status": "AWAITING_DELIVERY_CALLBACK",
+          "note": "No delivery callback received as of ticket time (20:05, ~3.5 minutes after the request — already past the normal 2-5 minute delivery-callback window, and the aggregator has had an active delay incident since 18:30)."
+        }
+      ]
+    },
+    "processor_status": {
+      "incidents": [
+        {
+          "partner": "Telco Airtime Aggregator (MTN corridor)",
+          "start": "2026-08-30T18:30:00+01:00",
+          "end": null,
+          "status": "DEGRADED",
+          "description": "Delivery callback delays affecting ~12% of requests since 18:30; aggregator has acknowledged, ETA for fix unknown."
+        }
+      ]
+    },
+    "knowledge_base": [
+      {
+        "title": "Vendor 202 Accepted vs. delivery confirmation",
+        "body": "A 202 Accepted response from a telco aggregator means the request was received, not that airtime was delivered. Final status must come from the delivery callback (DELIVERED or FAILED). If no callback arrives within the normal window (2-5 minutes) and there's a known aggregator incident, requery the vendor; if it confirms non-delivery, auto-reverse the customer's debit. This ticket should also be logged against the open aggregator incident rather than treated as an isolated bug."
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "transactions",
+      "schema": [
+        "reference",
+        "timestamp",
+        "amount_ngn",
+        "product",
+        "vendor_status",
+        "app_displayed_status"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-661D02",
+          "timestamp": "2026-08-30T20:01:33+01:00",
+          "amount_ngn": 2000,
+          "product": "MTN Airtime",
+          "vendor_status": "ACCEPTED (202)",
+          "app_displayed_status": "Successful"
+        }
+      ],
+      "suggested_queries": [
+        {
+          "query": "SELECT reference, vendor_status, app_displayed_status FROM transactions WHERE reference = 'TRX-661D02';",
+          "result_summary": "1 row: vendor_status='ACCEPTED (202)' but app_displayed_status='Successful' — confirms the app displayed a non-final vendor response as if it were a completed delivery."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Telco aggregator returned 202 Accepted (queued) but never sent a delivery confirmation; our system wrongly displayed this as 'Successful', and the aggregator has an active delivery-delay incident.",
+      "correct": true
+    },
+    {
+      "text": "The customer entered the wrong phone number for the top-up.",
+      "correct": false
+    },
+    {
+      "text": "MTN's network is completely down in the customer's area.",
+      "correct": false
+    },
+    {
+      "text": "The wallet balance was insufficient, so the debit silently failed.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Requery the vendor for final delivery status; if it confirms non-delivery, auto-reverse the NGN 2,000 debit, give a 2-hour expectation, and log this against the open aggregator incident.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Tell the customer to contact MTN directly since it's a network issue.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Refund immediately without requerying the vendor first.",
+      "correct": false,
+      "quality": "acceptable_but_risky"
+    },
+    {
+      "text": "Ask the customer to wait 24 hours with no explanation or interim status.",
+      "correct": false,
+      "quality": "wrong"
+    }
+  ],
+  "escalation": {
+    "required": false,
+    "target": "Attach to existing aggregator incident (no new escalation needed)"
+  },
+  "customer_expectation_timeframe": "Requery and refund-if-failed within 2 hours",
+  "model_reply": "Hi Emeka, sorry about this — I can see exactly what happened. Your NGN 2,000 request was sent and accepted by the network for processing, but the final delivery confirmation never came back, and there's a known delay affecting some MTN airtime top-ups tonight, which we're tracking. I'm requerying your specific transaction now; if it comes back as not delivered (which looks likely given the delay), I'll reverse the NGN 2,000 straight back to your wallet. You should see the outcome within 2 hours — I'll update you here as soon as I have it, no need to follow up in the meantime.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Blamed the customer (wrong number) or MTN's network broadly.",
+      "1": "Identified 'delivery failed' generically without citing the 202-vs-delivered distinction.",
+      "2": "Cited the 202 status issue but missed linking it to the active aggregator incident.",
+      "3": "Correctly explains the 202 Accepted-vs-delivered status confusion and links it to the known aggregator delay incident."
+    },
+    "tool_efficiency": {
+      "0": "Did not open Transaction Log or Processor Status before responding.",
+      "1": "Opened Transaction Log only.",
+      "2": "Checked Transaction Log and Processor Status but not the KB article on 202-handling policy.",
+      "3": "Checked Transaction Log (vendor_status vs displayed status, confirmed via SQL lookup by reference), Processor Status (incident), and the KB article on requery/reversal policy."
+    },
+    "compliance_safety": {
+      "0": "Promised airtime would definitely arrive without checking the callback status.",
+      "1": "Gave a vague 'we'll look into it' with no concrete mechanism.",
+      "2": "Explained the requery mechanism but gave an unrealistic (e.g., instant) timeframe.",
+      "3": "Explained the requery-then-reverse mechanism with a realistic 2-hour timeframe, no overpromising delivery."
+    },
+    "communication_clarity": {
+      "0": "Uses internal jargon (202, callback, vendor_status) directly with the customer.",
+      "1": "Plain language but no timeframe given.",
+      "2": "Plain language with timeframe but no acknowledgement of urgency (he needs to make a call).",
+      "3": "Plain language, acknowledges urgency, gives a concrete 2-hour timeframe, and sets expectation clearly."
+    },
+    "escalation_judgment": {
+      "0": "Escalated to a new team/incident when an existing aggregator incident already covers this.",
+      "1": "Unsure whether to escalate or attach to incident.",
+      "2": "Correctly attached to incident but didn't check if one already existed.",
+      "3": "Correctly identifies the existing aggregator incident and attaches this ticket to it rather than raising a new escalation."
+    }
+  }
+}

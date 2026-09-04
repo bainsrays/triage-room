@@ -1,0 +1,161 @@
+{
+  "id": "INC-2110",
+  "title": "Crypto remittance: USDT sent, NGN not received (wrong network)",
+  "track": "Wallets & Crypto",
+  "difficulty": "hard",
+  "channel": "in-app chat",
+  "priority": "HIGH",
+  "sla_minutes": 60,
+  "customer": {
+    "name": "Chiamaka Obi",
+    "kyc_tier": "Tier 3",
+    "country": "Nigeria",
+    "rails": [
+      "USDT deposit (crypto-to-fiat remittance)"
+    ],
+    "account_summary": "Wallet 7 months old, regular crypto-to-NGN remittance user, ~2 conversions/month, first deposit issue."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-31T18:20:00+01:00",
+      "text": "I sent 500 USDT to the deposit address you gave me from my exchange 3 hours ago. The block explorer shows it as confirmed already. My NGN has still not arrived and my landlord is waiting for this rent money tonight. Please check now, this is urgent."
+    },
+    {
+      "from": "customer",
+      "timestamp": "2026-08-31T18:35:00+01:00",
+      "text": "Here is the transaction hash: 0x7a3f9e1c2b8d4a6f0e5c1b9d3a7f2e8c4b6d0a1f5e9c3b7d2a8f4e0c6b1d9a3f. My exchange withdrawal page says ERC20 I think, but let me double check."
+    }
+  ],
+  "hidden_root_cause": "Chiamaka's deposit address was issued for USDT on Ethereum (ERC-20). Her exchange processed the withdrawal on BNB Smart Chain (BEP-20) instead. Because both chains are EVM-compatible, the same 0x address exists on both, so the exchange accepted it without warning. Our chain listener only watches Ethereum for that address, so it never saw an inbound deposit. The 500 USDT is sitting at our address on BNB Chain, which we control the key for, but it needs a manual wrong-network recovery (sweep from BSC) rather than automatic crediting.",
+  "red_herring": "Chiamaka says the exchange showed 'ERC20', which would (if true) point to a listener bug on our side. The block explorer shows the transaction confirmed on BNB Smart Chain, not Ethereum. Always verify the network on the explorer, not from the customer's recollection. Note also that a 0x hash alone does NOT tell you which EVM chain was used; only the explorer network does.",
+  "tools": {
+    "crypto_deposit_monitor": {
+      "expected_deposit": {
+        "customer": "Chiamaka Obi",
+        "deposit_address": "0x9f3c7e1a2b8d4f6e0c5b1d9a3f7e2c8b4d6a0f1e",
+        "expected_network": "ERC-20 (Ethereum)",
+        "asset": "USDT"
+      },
+      "inbound_deposits_seen": [],
+      "note": "No inbound ERC-20 USDT deposits detected for this address in the last 24 hours (Ethereum listener healthy, last block indexed 2 minutes ago)."
+    },
+    "block_explorer_lookup": {
+      "tx_hash": "0x7a3f9e1c2b8d4a6f0e5c1b9d3a7f2e8c4b6d0a1f5e9c3b7d2a8f4e0c6b1d9a3f",
+      "network_detected": "BEP-20 (BNB Smart Chain)",
+      "token_contract": "0x55d398326f99059fF775485246999027B3197955 (USDT on BSC)",
+      "amount": "500 USDT",
+      "to_address": "0x9f3c7e1a2b8d4f6e0c5b1d9a3f7e2c8b4d6a0f1e (same address the customer was issued; it exists on every EVM chain)",
+      "confirmations": 892,
+      "status": "CONFIRMED",
+      "note": "Transaction is confirmed on BNB Smart Chain. The destination matches the customer's issued deposit address, but that address was issued for Ethereum (ERC-20). Same address, different chain: funds are on BSC, not Ethereum."
+    },
+    "knowledge_base": [
+      {
+        "title": "Wrong-network deposits: recovery policy & fee",
+        "body": "When a customer sends funds on a different network than the address was issued for (e.g. BEP-20 to an address issued for ERC-20), the deposit is not automatically detected or credited because our listener only watches the expected chain. For EVM-compatible chains (Ethereum, BNB Smart Chain, Polygon, Arbitrum) we control the same address on every chain, so a manual recovery is possible: confirm the tx hash and network on the block explorer, open a wrong-network recovery request with Crypto Ops, apply the standard recovery fee (covers manual sweep and gas), and expect 3-5 business days. Funds sent to a non-EVM chain we do not support (e.g. Tron when we only issued EVM addresses) may not be recoverable; escalate for case-by-case review. There is no instant NGN payout for wrong-network deposits. Educate the customer on selecting the correct network for future deposits. (Simulator content.)"
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "crypto_deposits",
+      "schema": [
+        "deposit_address",
+        "expected_network",
+        "asset",
+        "tx_hash",
+        "network_seen",
+        "amount",
+        "credited_at"
+      ],
+      "rows": [],
+      "suggested_queries": [
+        {
+          "query": "SELECT * FROM crypto_deposits WHERE deposit_address = '0x9f3c7e1a2b8d4f6e0c5b1d9a3f7e2c8b4d6a0f1e' AND expected_network = 'ERC-20';",
+          "result_summary": "0 rows returned — our listener has never recorded a credited ERC-20 deposit for this address. This confirms the listener isn't lying or broken; it genuinely never saw an Ethereum-network transaction here, because the funds moved on a different chain entirely. Next step is the Block Explorer lookup by tx hash, not assuming the funds are lost."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Customer sent USDT on BNB Smart Chain (BEP-20) to an address issued for Ethereum (ERC-20); the same 0x address exists on both chains, and our listener only monitors Ethereum for it.",
+      "correct": true
+    },
+    {
+      "text": "Our Ethereum (ERC-20) deposit listener is broken and missing legitimate deposits.",
+      "correct": false
+    },
+    {
+      "text": "The customer's exchange never actually sent the funds despite showing 'confirmed'.",
+      "correct": false
+    },
+    {
+      "text": "This is a scam address and the funds are gone permanently.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Confirm on the block explorer that the tx settled on BNB Smart Chain (not Ethereum), open a wrong-network recovery request with Crypto Ops (recovery fee applies, 3-5 business days), state clearly there is no instant NGN payout, and explain how to pick the correct network next time.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Credit her NGN balance immediately at the quoted rate since the deposit is 'confirmed' on the explorer.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Tell her the funds are permanently lost and nothing can be done.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Ask her to resend another 500 USDT on the correct network while we 'look into' the first one, with no clear recovery process stated.",
+      "correct": false,
+      "quality": "wrong"
+    }
+  ],
+  "escalation": {
+    "required": true,
+    "target": "Crypto Ops (wrong-network recovery request)",
+    "required_payload": [
+      "Tx hash / block explorer link",
+      "Network / rail name"
+    ]
+  },
+  "customer_expectation_timeframe": "3-5 business days for wrong-network recovery, once confirmed",
+  "model_reply": "Hi Chiamaka, thank you for the transaction hash, that helps a lot. I checked it on the block explorer and can see exactly what happened: your 500 USDT was sent on the BNB Smart Chain (BEP-20) network, but the deposit address we gave you is for Ethereum (ERC-20). Because the two networks share the same address format, your exchange accepted it without a warning, and our system only watches the Ethereum network for that address, so it never saw the deposit arrive. Your funds are not lost. They are sitting at our address on BNB Smart Chain and I am opening a wrong-network recovery request with our Crypto Ops team now. A standard recovery fee applies to cover the manual work and network fees, and recovery typically takes 3-5 business days. I know that is not what you want to hear with rent due tonight, but I would rather be upfront than promise something faster than we can deliver: there is no instant NGN payout for a wrong-network deposit. Going forward, please check that the network shown on your exchange's withdrawal screen matches the network we specify next to the deposit address (ERC-20 in this case) before you confirm. I will update you as soon as Crypto Ops confirms the recovery.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Assumed the funds are permanently lost or blamed a listener bug.",
+      "1": "Identified 'wrong network' generically without confirming the actual chain on the block explorer.",
+      "2": "Identified the network mismatch but didn't explain why our listener missed it (only monitors the expected network).",
+      "3": "Correctly identifies the BEP-20 vs ERC-20 mismatch using explorer evidence (network on which the tx confirmed), explains why the exchange accepted it (shared EVM address format) and why the listener missed it (only monitors Ethereum)."
+    },
+    "tool_efficiency": {
+      "0": "Did not check Crypto Deposit Monitor or Block Explorer before responding.",
+      "1": "Checked Crypto Deposit Monitor (saw nothing) without verifying the actual network via the block explorer.",
+      "2": "Checked the block explorer but did not read the wrong-network recovery KB article before proposing next steps.",
+      "3": "Checked Crypto Deposit Monitor (no inbound match, listener healthy, confirmed via the SQL query against crypto_deposits), Block Explorer (confirmed BNB Smart Chain), and the recovery-policy KB article before diagnosing and resolving."
+    },
+    "compliance_safety": {
+      "0": "Promised instant NGN credit for an unrecovered wrong-network deposit.",
+      "1": "Avoided instant credit but was vague about the fee or timeline.",
+      "2": "Named the fee and timeline but didn't clearly state no instant payout is possible.",
+      "3": "Clearly states no instant payout, discloses the recovery fee and 3-5 day timeline, and does not overpromise given the customer's urgency."
+    },
+    "communication_clarity": {
+      "0": "Uses purely technical language (contract addresses, hex formats) without a plain-language summary for the customer.",
+      "1": "Plain language but no clear timeframe.",
+      "2": "Gives a timeframe but no forward-looking education on network selection.",
+      "3": "Plain-language explanation of same-address/different-chain, honest about the timeline despite her urgency, and educates on checking network selection for future deposits."
+    },
+    "escalation_judgment": {
+      "0": "Did not escalate; tried to resolve without Crypto Ops involvement.",
+      "1": "Escalated to the wrong team (e.g., Payments Ops or Treasury Ops).",
+      "2": "Escalated to Crypto Ops but without specifying the wrong-network recovery request action.",
+      "3": "Escalated to Crypto Ops specifically to open a wrong-network recovery request, matching the ground truth."
+    }
+  }
+}

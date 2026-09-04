@@ -1,0 +1,223 @@
+{
+  "id": "INC-2106",
+  "title": "Merchant: API returns 401 after key rotation",
+  "track": "Merchant/API",
+  "difficulty": "hard",
+  "channel": "merchant support ticket",
+  "priority": "MEDIUM",
+  "sla_minutes": 120,
+  "customer": {
+    "name": "Funmi Adeyemi (Backend Developer, Lumo Retail)",
+    "kyc_tier": "Merchant Tier 1 (verified business)",
+    "country": "Nigeria",
+    "rails": [
+      "API integration, card + transfer checkout"
+    ],
+    "account_summary": "Merchant integration live 6 months, small team, recently rotated production secret key."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-29T13:40:00+01:00",
+      "text": "We regenerated our secret key yesterday for security reasons and now every single API call fails with 401 Unauthorized. We are using Bearer auth exactly as documented. Is there an outage on your end? We need this fixed urgently, our checkout is fully down."
+    }
+  ],
+  "hidden_root_cause": "The merchant's engineering team correctly generated a new secret key and correctly updated their STAGING environment variable with it, but forgot to also update the PRODUCTION environment variable. Production is still using the old key, which was automatically revoked the moment the new key was generated (key rotation immediately invalidates the previous key). Every production API call is therefore using a dead key, hence the 401s. The Bearer auth header format itself is correct — that is not the problem.",
+  "red_herring": "The merchant assumes this must be an outage on our side because they are confident they 'did everything right' and the header format (Bearer scheme) is correct — but Processor Status is fully green, and the real issue is which key is being sent, not how it's being sent.",
+  "tools": {
+    "customer_360": {
+      "profile": {
+        "name": "Lumo Retail (merchant account)",
+        "contact": "Funmi Adeyemi, Backend Developer",
+        "kyc_tier": "Merchant Tier 1",
+        "integration_age": "6 months",
+        "notes": "Small technical team (2 developers). No prior integration incidents."
+      }
+    },
+    "merchant_api_console": {
+      "request_inspector": {
+        "columns": [
+          "timestamp",
+          "endpoint",
+          "auth_header_prefix",
+          "http_status",
+          "error_body"
+        ],
+        "rows": [
+          {
+            "timestamp": "2026-08-29T12:05:11+01:00",
+            "endpoint": "POST /v1/charges",
+            "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+            "http_status": 401,
+            "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+          },
+          {
+            "timestamp": "2026-08-29T12:07:44+01:00",
+            "endpoint": "POST /v1/charges",
+            "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+            "http_status": 401,
+            "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+          },
+          {
+            "timestamp": "2026-08-29T13:30:02+01:00",
+            "endpoint": "POST /v1/charges",
+            "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+            "http_status": 401,
+            "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+          }
+        ],
+        "note": "All production requests since rotation use key prefix ending '...old7' (the revoked key). No requests observed using the new key prefix ('...new3') from the production IP range."
+      },
+      "key_management": {
+        "rotation_log": [
+          {
+            "timestamp": "2026-08-28T18:00:00+01:00",
+            "action": "KEY_GENERATED",
+            "new_key_prefix": "sk_live_9mQ2...new3",
+            "note": "Old key sk_live_4kP9...old7 automatically revoked at generation time per rotation policy."
+          }
+        ]
+      },
+      "curl_simulator_output": {
+        "command": "curl -i https://api.example-payments.com/v1/charges -H 'Authorization: Bearer sk_live_9mQ2...new3' -d amount=1000",
+        "output": "HTTP/1.1 200 OK\n{\"id\": \"ch_test001\", \"status\": \"succeeded\"}"
+      }
+    },
+    "processor_status": {
+      "incidents": [
+        {
+          "partner": "Core API / Auth service",
+          "status": "OPERATIONAL",
+          "description": "No incidents. Auth service correctly rejecting revoked keys as designed."
+        }
+      ]
+    },
+    "knowledge_base": [
+      {
+        "title": "API key rotation: common integration mistake",
+        "body": "The most common cause of 401s immediately after a merchant rotates their key is updating only one environment (often staging) and not production, since rotation immediately revokes the old key everywhere. Verify by checking which key prefix appears in the merchant's production requests. Never share back a merchant's full secret key over chat/email, even to help debug — confirm only the prefix and rotation timestamp."
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "auth_events",
+      "schema": [
+        "timestamp",
+        "endpoint",
+        "auth_header_prefix",
+        "http_status",
+        "error_body"
+      ],
+      "rows": [
+        {
+          "timestamp": "2026-08-29T12:05:11+01:00",
+          "endpoint": "POST /v1/charges",
+          "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+          "http_status": 401,
+          "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+        },
+        {
+          "timestamp": "2026-08-29T12:07:44+01:00",
+          "endpoint": "POST /v1/charges",
+          "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+          "http_status": 401,
+          "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+        },
+        {
+          "timestamp": "2026-08-29T13:30:02+01:00",
+          "endpoint": "POST /v1/charges",
+          "auth_header_prefix": "Bearer sk_live_4kP9...old7",
+          "http_status": 401,
+          "error_body": "{\"error\": {\"code\": \"invalid_api_key\", \"message\": \"The API key provided is no longer valid.\"}}"
+        }
+      ],
+      "suggested_queries": [
+        {
+          "query": "SELECT DISTINCT auth_header_prefix FROM auth_events WHERE endpoint = 'POST /v1/charges';",
+          "result_summary": "Returns exactly 1 distinct value: 'Bearer sk_live_4kP9...old7' — every production call since the rotation is using the OLD, revoked key. No request has ever used the new '...new3' prefix from production."
+        },
+        {
+          "query": "SELECT http_status, COUNT(*) FROM auth_events GROUP BY http_status;",
+          "result_summary": "100% of rows are http_status=401 with error code invalid_api_key — consistent with a stale key, not a malformed header or platform outage (which would show mixed or 5xx statuses)."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Merchant updated the new key in their staging environment variable only; production is still sending the old, now-revoked key.",
+      "correct": true
+    },
+    {
+      "text": "This is an outage in our authentication service rejecting valid keys.",
+      "correct": false
+    },
+    {
+      "text": "The merchant's Bearer header format is malformed, causing the rejection.",
+      "correct": false
+    },
+    {
+      "text": "The new key was generated with insufficient permissions/scopes.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Show the merchant that production requests are using the old, revoked key prefix; confirm no outage; advise them to update the production environment variable with the new key, and verify with the working curl example.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Send the merchant their full new secret key over the support chat to make sure they have the right one.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Manually re-enable the old, revoked key as a temporary fix.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Escalate to engineering as a suspected platform-wide auth outage.",
+      "correct": false,
+      "quality": "wrong"
+    }
+  ],
+  "escalation": {
+    "required": false,
+    "target": null
+  },
+  "customer_expectation_timeframe": "Immediate — fix is a config change on the merchant's side, no wait time once identified",
+  "model_reply": "Hi Funmi, thanks for the details — good news, there's no outage on our end (Auth service and all core APIs are fully operational). I checked the request logs for your account and I can see the issue: every production call since the rotation is still using the old key (ending '...old7'), which was automatically revoked the moment your new key was generated yesterday at 18:00. It looks like the new key made it into your staging environment but not production — that's a very common thing to miss during rotation. If you update your production environment variable to the new key (ending '...new3') and redeploy, calls should succeed right away — I ran a quick test with that key just now and got a clean 200 OK. For security, I won't share the full key back over chat, but I can confirm the prefix and rotation timestamp anytime you need to double check. Let us know once it's updated, or if you're still seeing 401s after that, and we'll dig further immediately.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Concluded it was an outage or a malformed header issue.",
+      "1": "Identified 'wrong key' generically without specifying staging-vs-production mismatch.",
+      "2": "Identified the staging/production mismatch but didn't confirm via the request inspector's key prefix.",
+      "3": "Correctly identifies that production is using the old, auto-revoked key because the new key only reached staging, confirmed by comparing key prefixes across logs."
+    },
+    "tool_efficiency": {
+      "0": "Did not open Request Inspector or Key Management before responding.",
+      "1": "Opened Request Inspector but not Key Management/rotation log.",
+      "2": "Checked both but didn't run/reference the curl test proving the new key works.",
+      "3": "Checked Request Inspector (key prefix, confirmed via the SQL DISTINCT query showing only the old prefix in production), Key Management (rotation timestamp), Processor Status (ruled out outage), and referenced the working curl test with the new key."
+    },
+    "compliance_safety": {
+      "0": "Shared the full secret key back to the merchant over chat.",
+      "1": "Avoided sharing the full key but was vague about which key/prefix is affected.",
+      "2": "Correctly withheld the full key but didn't explain why (security policy).",
+      "3": "Confirms only the key prefix/rotation timestamp, explicitly states the full key won't be shared over chat, and explains why."
+    },
+    "communication_clarity": {
+      "0": "Blames the merchant harshly or is condescending about the 'common mistake'.",
+      "1": "Plain language but no concrete fix instructions.",
+      "2": "Gives the fix but no verification step or reassurance about urgency.",
+      "3": "Clearly explains the cause, gives the exact fix (update production env var), reassures no outage, and offers a verified working example."
+    },
+    "escalation_judgment": {
+      "0": "Escalated to engineering/platform team for what is a merchant-side config issue.",
+      "1": "Hedged on whether to escalate.",
+      "2": "Correctly did not escalate but with weak reasoning.",
+      "3": "Correctly resolved without escalation, clearly distinguishing this as a merchant-side fix, not a platform incident."
+    }
+  }
+}

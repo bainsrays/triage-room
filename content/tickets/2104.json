@@ -1,0 +1,205 @@
+{
+  "id": "INC-2104",
+  "title": "KYC upgrade rejected three times",
+  "track": "Identity & Risk",
+  "difficulty": "easy",
+  "channel": "email",
+  "priority": "LOW",
+  "sla_minutes": 480,
+  "customer": {
+    "name": "Chidinma Okafor-Nwosu",
+    "kyc_tier": "Tier 1 (applying for Tier 2)",
+    "country": "Nigeria",
+    "rails": [
+      "N/A - KYC/limits issue"
+    ],
+    "account_summary": "Wallet 5 months old, wants higher transfer limits for a small business."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-27T10:15:00+01:00",
+      "text": "Good morning. I have uploaded my ID three times now to upgrade my account and it keeps saying rejected. I need my limit raised so I can pay my suppliers. My ID is clear, I don't understand why it keeps failing. Please help."
+    }
+  ],
+  "hidden_root_cause": "Chidinma's uploaded ID document shows her legal name as 'Chidinma Okafor-Nwosu' (hyphenated surname, reflecting her married name), while the BVN (Bank Verification Number) record on file shows 'Chidinma Okafor' (unhyphenated, maiden name only). The automated name-matching algorithm scored the match at 78 out of 100, below the 85 auto-approve threshold, causing automatic rejection each time despite the document image itself being clear and genuine.",
+  "red_herring": "The customer assumes the document image quality is the problem (since it 'looks clear' to her) and keeps re-uploading the same document, which will never fix a name-matching score issue — the fix is a policy override or supporting document, not a better photo.",
+  "tools": {
+    "kyc_console": {
+      "submission_history": [
+        {
+          "attempt": 1,
+          "timestamp": "2026-08-25T09:00:00+01:00",
+          "document_status": "IMAGE_OK",
+          "name_on_doc": "Chidinma Okafor-Nwosu",
+          "name_on_bvn": "Chidinma Okafor",
+          "match_score": 78,
+          "threshold": 85,
+          "outcome": "REJECTED"
+        },
+        {
+          "attempt": 2,
+          "timestamp": "2026-08-26T14:20:00+01:00",
+          "document_status": "IMAGE_OK",
+          "name_on_doc": "Chidinma Okafor-Nwosu",
+          "name_on_bvn": "Chidinma Okafor",
+          "match_score": 78,
+          "threshold": 85,
+          "outcome": "REJECTED"
+        },
+        {
+          "attempt": 3,
+          "timestamp": "2026-08-27T08:45:00+01:00",
+          "document_status": "IMAGE_OK",
+          "name_on_doc": "Chidinma Okafor-Nwosu",
+          "name_on_bvn": "Chidinma Okafor",
+          "match_score": 78,
+          "threshold": 85,
+          "outcome": "REJECTED"
+        }
+      ],
+      "field_diff": {
+        "first_name": "MATCH (Chidinma)",
+        "surname": "PARTIAL MATCH (Okafor-Nwosu vs Okafor — subset match, hyphenated addition)",
+        "date_of_birth": "MATCH",
+        "document_type": "National ID (NIN slip)",
+        "document_authenticity_check": "PASS"
+      }
+    },
+    "knowledge_base": [
+      {
+        "title": "KYC name-mismatch override policy",
+        "body": "If the automated name-match score is above 70 and the document authenticity check passes, support/compliance may manually approve with a documented override reason (e.g., 'hyphenated married surname, subset match, DOB confirmed'). If the score is below 70, request a supporting document (marriage certificate or affidavit of name change) instead of overriding."
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "customers",
+      "schema": [
+        "customer_name",
+        "name_on_bvn",
+        "kyc_tier",
+        "submission_attempt",
+        "match_score",
+        "threshold",
+        "outcome"
+      ],
+      "rows": [
+        {
+          "customer_name": "Chidinma Okafor-Nwosu",
+          "name_on_bvn": "Chidinma Okafor",
+          "kyc_tier": "Tier 1",
+          "submission_attempt": 1,
+          "match_score": 78,
+          "threshold": 85,
+          "outcome": "REJECTED"
+        },
+        {
+          "customer_name": "Chidinma Okafor-Nwosu",
+          "name_on_bvn": "Chidinma Okafor",
+          "kyc_tier": "Tier 1",
+          "submission_attempt": 2,
+          "match_score": 78,
+          "threshold": 85,
+          "outcome": "REJECTED"
+        },
+        {
+          "customer_name": "Chidinma Okafor-Nwosu",
+          "name_on_bvn": "Chidinma Okafor",
+          "kyc_tier": "Tier 1",
+          "submission_attempt": 3,
+          "match_score": 78,
+          "threshold": 85,
+          "outcome": "REJECTED"
+        }
+      ],
+      "suggested_queries": [
+        {
+          "query": "SELECT submission_attempt, match_score, threshold, outcome FROM customers WHERE customer_name = 'Chidinma Okafor-Nwosu' ORDER BY submission_attempt;",
+          "result_summary": "Returns 3 identical rows: match_score=78 every time, always below threshold=85 — confirms re-uploading the same document will never change the outcome; the fix is a policy override or supporting document, not a better photo."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Name-match score (78) falls below the 85 auto-approve threshold due to a hyphenated married surname on the ID vs. maiden name on BVN; document image itself is fine.",
+      "correct": true
+    },
+    {
+      "text": "The document image is blurry or low quality, causing repeated rejection.",
+      "correct": false
+    },
+    {
+      "text": "The customer's BVN itself is invalid or does not exist in the national database.",
+      "correct": false
+    },
+    {
+      "text": "Her account is flagged for suspected identity fraud pending investigation.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Since match score (78) is above the 70 floor and document authenticity passed, apply a manual override with a documented reason (hyphenated married surname, DOB match confirmed), and escalate to Compliance for override sign-off.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Ask her to re-upload the same ID document a fourth time.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Reject permanently and tell her Tier 2 is not available to her.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Approve unilaterally without any Compliance involvement since the case seems obviously legitimate.",
+      "correct": false,
+      "quality": "acceptable_but_risky"
+    }
+  ],
+  "escalation": {
+    "required": true,
+    "target": "Compliance (KYC override sign-off)",
+    "required_payload": [
+      "Customer evidence (screenshot, doc)",
+      "Timeline of events"
+    ]
+  },
+  "customer_expectation_timeframe": "Override decision within 1 business day, or a request for a supporting document if declined",
+  "model_reply": "Hi Chidinma, thank you for your patience, and I'm sorry for the back-and-forth. I've looked into why your upgrade keeps being rejected: it isn't your document image, which is clear and passes our authenticity check. The issue is that your ID shows 'Okafor-Nwosu' while our records show 'Okafor', so our automated name check can't fully match them on its own. I'm escalating this to our Compliance team with a note explaining the hyphenated married surname and your matching date of birth, so they can manually approve the upgrade. You don't need to re-upload anything for now — I'll follow up within 1 business day with the outcome. If Compliance needs a supporting document (like a marriage certificate), I'll let you know exactly what's required.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Assumed the document image or BVN itself was the problem.",
+      "1": "Identified a 'name mismatch' generically without citing the actual score or threshold.",
+      "2": "Cited the score/threshold but didn't explain the hyphenated-surname cause.",
+      "3": "Correctly explains the hyphenated married surname vs. maiden-name BVN record, and that the 78/85 score — not image quality — caused rejection."
+    },
+    "tool_efficiency": {
+      "0": "Did not open KYC Console before responding.",
+      "1": "Saw the rejection but not the field diff/match score detail.",
+      "2": "Saw the match score and field diff but didn't check the override policy KB article.",
+      "3": "Reviewed submission history, field diff, ran the SQL query showing all 3 attempts scored identically (78/85), and read the override-policy KB article before deciding."
+    },
+    "compliance_safety": {
+      "0": "Approved the upgrade unilaterally with no Compliance sign-off, or promised an outcome Compliance hasn't confirmed.",
+      "1": "Escalated but gave no reasoning/evidence for Compliance to act on.",
+      "2": "Escalated with partial reasoning but didn't note the DOB match / authenticity pass.",
+      "3": "Escalated to Compliance with a clear, documented override reason and no unilateral limit change promised."
+    },
+    "communication_clarity": {
+      "0": "Blames the customer for uploading a 'bad' document.",
+      "1": "Plain language but no explanation of what's actually wrong.",
+      "2": "Explains the mismatch but gives no timeframe.",
+      "3": "Plain-language explanation of the real cause, clear next step (escalation), and a concrete timeframe."
+    },
+    "escalation_judgment": {
+      "0": "Did not escalate at all, tried to resolve unilaterally.",
+      "1": "Escalated to the wrong team (e.g., Payments Ops).",
+      "2": "Escalated to Compliance but without the override rationale.",
+      "3": "Escalated to Compliance specifically for override sign-off, with rationale matching KB policy."
+    }
+  }
+}

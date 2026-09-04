@@ -1,0 +1,231 @@
+{
+  "id": "INC-2101",
+  "title": "Transfer stuck \"Pending\" for 6 hours",
+  "track": "Payments",
+  "difficulty": "hard",
+  "channel": "in-app chat",
+  "priority": "HIGH",
+  "sla_minutes": 60,
+  "customer": {
+    "name": "Ifeoma Chukwu",
+    "kyc_tier": "Tier 3",
+    "country": "Nigeria",
+    "rails": [
+      "NIP transfer (bank-to-bank)"
+    ],
+    "account_summary": "Personal wallet, verified 14 months, average 6 outbound transfers/month, no prior disputes."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-28T15:10:00+01:00",
+      "text": "Good afternoon. I sent NGN 250,000 to my supplier this morning at about 8:40am and it is still showing Pending on my app. My supplier says he has not received anything. He needs this today to release my goods. Please can someone check this urgently?"
+    },
+    {
+      "from": "customer",
+      "timestamp": "2026-08-28T15:42:00+01:00",
+      "text": "Please should I just send it again from my other account so he can release the goods, and you refund me later when this one clears?"
+    }
+  ],
+  "hidden_root_cause": "The beneficiary bank returned a TIMEOUT response on the NIP (NIBSS Instant Payment) leg during a partner-bank degradation window. Our system correctly queued the transaction for a status requery but a backlog in the requery worker left it displayed as PENDING instead of moving it to REVERSAL_INITIATED. The money never left the customer's wallet-of-record; it is held in a suspense state pending requery, not lost, and not with the supplier's bank.",
+  "red_herring": "Customer assumes the money has left the building and reached (or is stuck at) the supplier's bank, and asks to send a second payment 'and get refunded later' — doing this would create a genuine duplicate-payment problem on top of a transient one.",
+  "tools": {
+    "customer_360": {
+      "profile": {
+        "name": "Ifeoma Chukwu",
+        "kyc_tier": "Tier 3",
+        "country": "Nigeria",
+        "phone": "+234 803 xxx 4471",
+        "wallet_id": "WAL-88213",
+        "member_since": "2025-06-14",
+        "recent_tickets": [
+          "None in last 90 days"
+        ],
+        "notes": "No fraud flags. No prior chargebacks."
+      }
+    },
+    "transaction_log": {
+      "columns": [
+        "reference",
+        "timestamp",
+        "amount_ngn",
+        "beneficiary_bank",
+        "channel",
+        "status",
+        "processor_response"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-9F31A2",
+          "timestamp": "2026-08-28T08:41:12+01:00",
+          "amount_ngn": 250000,
+          "beneficiary_bank": "First Horizon MFB",
+          "channel": "NIP",
+          "status": "PENDING",
+          "processor_response": "TIMEOUT"
+        }
+      ],
+      "status_history": [
+        {
+          "timestamp": "2026-08-28T08:41:12+01:00",
+          "status": "INITIATED",
+          "note": "Debit authorized, wallet balance held."
+        },
+        {
+          "timestamp": "2026-08-28T08:41:19+01:00",
+          "status": "SENT_TO_NIBSS",
+          "note": "NIP request dispatched."
+        },
+        {
+          "timestamp": "2026-08-28T09:18:47+01:00",
+          "status": "PENDING",
+          "note": "processor_response=TIMEOUT; requery job queued, retry_count=1"
+        },
+        {
+          "timestamp": "2026-08-28T15:05:00+01:00",
+          "status": "PENDING",
+          "note": "No further status change recorded; requery worker backlog flagged by monitoring at 12:30."
+        }
+      ]
+    },
+    "processor_status": {
+      "incidents": [
+        {
+          "partner": "NIBSS – First Horizon MFB corridor",
+          "start": "2026-08-28T08:40:00+01:00",
+          "end": "2026-08-28T09:20:00+01:00",
+          "status": "DEGRADED",
+          "description": "Elevated timeout rate on inbound credit confirmations for this beneficiary bank during the window. Resolved by partner at 09:20."
+        },
+        {
+          "partner": "Requery worker (internal)",
+          "start": "2026-08-28T12:30:00+01:00",
+          "end": null,
+          "status": "BACKLOGGED",
+          "description": "Queue depth 340 transactions above normal; on-call paged 12:35."
+        }
+      ]
+    },
+    "knowledge_base": [
+      {
+        "title": "NIP timeout & requery policy",
+        "body": "When NIBSS returns TIMEOUT, the transaction must be requeried within 15 minutes. NIP settles in real time, 24/7, so requery and reversal SLAs run on calendar hours, not banking business hours. If requery confirms the debit did not reach the beneficiary, initiate REVERSAL_INITIATED and credit the customer within 24 hours per CBN guidance on failed electronic transfer reversals. Never advise the customer to resend while a transaction shows PENDING with a TIMEOUT processor_response — this risks a duplicate payment if both eventually settle."
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "transactions",
+      "schema": [
+        "reference",
+        "timestamp",
+        "amount_ngn",
+        "beneficiary_bank",
+        "channel",
+        "status",
+        "processor_response"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-9F31A2",
+          "timestamp": "2026-08-28T08:41:12+01:00",
+          "amount_ngn": 250000,
+          "beneficiary_bank": "First Horizon MFB",
+          "channel": "NIP",
+          "status": "PENDING",
+          "processor_response": "TIMEOUT"
+        }
+      ],
+      "suggested_queries": [
+        {
+          "query": "SELECT reference, status, processor_response FROM transactions WHERE reference = 'TRX-9F31A2';",
+          "result_summary": "Returns 1 row: status=PENDING, processor_response=TIMEOUT — confirms the NIP leg timed out and was never marked failed or reversed."
+        },
+        {
+          "query": "SELECT reference, status, processor_response FROM transactions WHERE processor_response = 'TIMEOUT' AND status = 'PENDING';",
+          "result_summary": "Confirms this is the pattern to check for stuck-transfer tickets generally: PENDING + TIMEOUT means requery/reversal is owed, not a resend."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Beneficiary bank returned TIMEOUT on the NIP leg; requery backlog kept status at PENDING instead of triggering reversal.",
+      "correct": true
+    },
+    {
+      "text": "The supplier's bank account is closed or invalid, rejecting the credit silently.",
+      "correct": false
+    },
+    {
+      "text": "Ifeoma's wallet had insufficient funds and the debit never actually completed.",
+      "correct": false
+    },
+    {
+      "text": "This is a suspected fraud hold pending manual review.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Manually trigger the requery job for TRX-9F31A2, initiate REVERSAL_INITIATED, and credit Ifeoma's wallet within 24 hours if the requery confirms non-delivery; explicitly advise her not to send a second payment.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Tell her to wait 48 hours for the bank to sort it out with no update on system status.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Approve a manual reversal immediately without requerying NIBSS first.",
+      "correct": false,
+      "quality": "acceptable_but_risky"
+    },
+    {
+      "text": "Advise her to send the second payment now since the supplier needs it today.",
+      "correct": false,
+      "quality": "wrong"
+    }
+  ],
+  "escalation": {
+    "required": true,
+    "target": "Payments Ops (requery worker backlog + manual reversal trigger)",
+    "required_payload": [
+      "Transaction reference",
+      "Timeline of events"
+    ]
+  },
+  "customer_expectation_timeframe": "Reversal confirmation within 24 hours (calendar hours — NIP runs 24/7, so this is not tied to banking business hours) if requery shows non-delivery",
+  "model_reply": "Hi Ifeoma, thank you for flagging this and for your patience. I've checked TRX-9F31A2 and can see the delay was caused by a timeout between us and your supplier's bank during a short window this morning — your NGN 250,000 has not left your account for good; it's held safely while we confirm delivery. I've triggered a manual recheck with the bank now. If it confirms the transfer did not go through, we will reverse it back to your wallet within 24 hours, and you'll see a status update in your app. Please do not send a second payment in the meantime — if you do and both eventually complete, you'd end up paying twice, and reconciling that takes longer than this fix. I'll follow up here as soon as I have a confirmed outcome, and by end of day at the latest.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Selected a root cause unrelated to the TIMEOUT/requery evidence (e.g., fraud hold, insufficient funds).",
+      "1": "Identified 'bank issue' generically without citing the TIMEOUT processor_response or requery backlog.",
+      "2": "Correctly identified the TIMEOUT + stalled requery but missed that funds are still held (not lost, not delivered).",
+      "3": "Correctly ties processor_response=TIMEOUT to the requery backlog and explains funds are held pending reversal, not delivered or lost."
+    },
+    "tool_efficiency": {
+      "0": "Jumped to a resolution without opening Transaction Log or Processor Status.",
+      "1": "Opened Transaction Log only; missed Processor Status incident window.",
+      "2": "Checked Transaction Log and Processor Status but not the Knowledge Base article on requery policy.",
+      "3": "Checked status history timeline, cross-referenced the Processor Status incident window, ran the SQL query filtering transactions by reference to confirm processor_response=TIMEOUT, and read the requery/reversal KB article before deciding."
+    },
+    "compliance_safety": {
+      "0": "Advised or implied the customer should send a second payment.",
+      "1": "Did not advise a second payment but gave no reason why it's risky.",
+      "2": "Discouraged the second payment with a vague reason.",
+      "3": "Explicitly told the customer not to resend and explained the duplicate-payment risk in plain language."
+    },
+    "communication_clarity": {
+      "0": "Reply is jargon-heavy (mentions NIP/NIBSS/processor codes to the customer) or blames the customer/bank unhelpfully.",
+      "1": "Plain language but no concrete timeframe given.",
+      "2": "Plain language with a timeframe, but no acknowledgement of urgency/impact on her supplier.",
+      "3": "Acknowledges impact, explains cause in plain language, gives a concrete 24-hour timeframe, and sets a clear next step."
+    },
+    "escalation_judgment": {
+      "0": "Did not escalate; treated it as self-resolvable with no Ops involvement.",
+      "1": "Escalated to the wrong team (e.g., Compliance or Crypto Ops).",
+      "2": "Escalated to Payments Ops but without specifying the requery/reversal action needed.",
+      "3": "Escalated to Payments Ops specifically to trigger the requery and manual reversal, matching the ground truth."
+    }
+  }
+}

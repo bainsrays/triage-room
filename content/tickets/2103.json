@@ -1,0 +1,254 @@
+{
+  "id": "INC-2103",
+  "title": "Account locked after \"suspicious login\"",
+  "track": "Identity & Risk",
+  "difficulty": "medium",
+  "channel": "in-app chat",
+  "priority": "MEDIUM",
+  "sla_minutes": 180,
+  "customer": {
+    "name": "Grace Adebayo",
+    "kyc_tier": "Tier 2",
+    "country": "Nigeria (currently travelling in UK)",
+    "rails": [
+      "N/A - login/access issue"
+    ],
+    "account_summary": "Wallet verified 20 months, frequent traveller, previously logged in from 2 countries before."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-30T19:22:00+01:00",
+      "text": "Hi, I can't log in to my account. It says my account is restricted for security reasons. I am currently travelling in London for a work trip and I think I mistyped my login code a few times on a new laptop. Can you please help me get back in? I need to pay for something tonight."
+    }
+  ],
+  "hidden_root_cause": "The risk engine auto-locked the account because three conditions coincided within a 10-minute window: a login attempt from a new, never-seen device fingerprint, a country change (Lagos to London) with no prior travel notice, and three consecutive failed OTP entries. This combination matches the automated account-takeover-prevention rule. All evidence points to this being the genuine customer travelling, not a takeover attempt: her KYC tier is verified, there are no fraud flags, and the failed OTPs match a plausible fat-finger pattern on a new device rather than automated guessing (attempts were 45+ seconds apart, not scripted).",
+  "red_herring": "A new device fingerprint AND a new country together look alarming and could be mistaken for account takeover in progress; the real distinguishing signal is the human-paced OTP attempts (not scripted/rapid) plus a clean KYC/fraud history, which together indicate a legitimate traveller, not a takeover.",
+  "tools": {
+    "customer_360": {
+      "profile": {
+        "name": "Grace Adebayo",
+        "kyc_tier": "Tier 2",
+        "country_registered": "Nigeria",
+        "wallet_id": "WAL-33291",
+        "member_since": "2024-12-20",
+        "recent_tickets": [
+          "None"
+        ],
+        "notes": "No fraud flags. Prior login history shows occasional travel to Ghana and Kenya, always with prior device registration."
+      }
+    },
+    "auth_risk_events": {
+      "columns": [
+        "timestamp",
+        "event",
+        "device_fingerprint",
+        "geo",
+        "detail"
+      ],
+      "rows": [
+        {
+          "timestamp": "2026-08-30T19:05:11+01:00",
+          "event": "LOGIN_ATTEMPT",
+          "device_fingerprint": "DEV-NEW-88f2 (never seen)",
+          "geo": "London, UK",
+          "detail": "Password correct."
+        },
+        {
+          "timestamp": "2026-08-30T19:05:44+01:00",
+          "event": "OTP_SENT",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "6-digit OTP sent to registered phone +234."
+        },
+        {
+          "timestamp": "2026-08-30T19:06:31+01:00",
+          "event": "OTP_FAILED",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "Attempt 1 of 3, entered code did not match."
+        },
+        {
+          "timestamp": "2026-08-30T19:07:20+01:00",
+          "event": "OTP_FAILED",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "Attempt 2 of 3, entered code did not match."
+        },
+        {
+          "timestamp": "2026-08-30T19:08:09+01:00",
+          "event": "OTP_FAILED",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "Attempt 3 of 3, entered code did not match. Risk engine auto-lock triggered."
+        },
+        {
+          "timestamp": "2026-08-30T19:08:10+01:00",
+          "event": "ACCOUNT_LOCKED",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "Rule: new_device + geo_change + 3x_otp_fail_within_10min."
+        }
+      ],
+      "risk_score": {
+        "current": 62,
+        "threshold_for_lock": 60,
+        "notes": "Score driven by device+geo novelty, not by velocity/automation signals (attempts were 40-50s apart, consistent with manual entry)."
+      }
+    },
+    "kyc_console": {
+      "tier": "Tier 2 (BVN + ID verified)",
+      "fraud_flags": "None",
+      "document_status": "All verified, no expiry issues.",
+      "identity_match_score": 97
+    },
+    "knowledge_base": [
+      {
+        "title": "Account lock: verification & release policy",
+        "body": "When a lock is triggered by new-device + geo-change + OTP failures, support may release the lock after (1) a liveness/ID re-check or KYC-tier confirmation, and (2) confirming the failed OTP pattern is consistent with manual entry (not scripted). Advise the customer to register the new device to avoid repeat locks."
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "auth_events",
+      "schema": [
+        "timestamp",
+        "event",
+        "device_fingerprint",
+        "geo",
+        "detail"
+      ],
+      "rows": [
+        {
+          "timestamp": "2026-08-30T19:05:11+01:00",
+          "event": "LOGIN_ATTEMPT",
+          "device_fingerprint": "DEV-NEW-88f2 (never seen)",
+          "geo": "London, UK",
+          "detail": "Password correct."
+        },
+        {
+          "timestamp": "2026-08-30T19:05:44+01:00",
+          "event": "OTP_SENT",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "6-digit OTP sent to registered phone +234."
+        },
+        {
+          "timestamp": "2026-08-30T19:06:31+01:00",
+          "event": "OTP_FAILED",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "Attempt 1 of 3, entered code did not match."
+        },
+        {
+          "timestamp": "2026-08-30T19:07:20+01:00",
+          "event": "OTP_FAILED",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "Attempt 2 of 3, entered code did not match."
+        },
+        {
+          "timestamp": "2026-08-30T19:08:09+01:00",
+          "event": "OTP_FAILED",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "Attempt 3 of 3, entered code did not match. Risk engine auto-lock triggered."
+        },
+        {
+          "timestamp": "2026-08-30T19:08:10+01:00",
+          "event": "ACCOUNT_LOCKED",
+          "device_fingerprint": "DEV-NEW-88f2",
+          "geo": "London, UK",
+          "detail": "Rule: new_device + geo_change + 3x_otp_fail_within_10min."
+        }
+      ],
+      "suggested_queries": [
+        {
+          "query": "SELECT timestamp, event, detail FROM auth_events WHERE event = 'OTP_FAILED' ORDER BY timestamp;",
+          "result_summary": "Returns 3 rows at 19:06:31, 19:07:20, 19:08:09 — roughly 40-50 seconds apart, consistent with a human re-entering a code, not a scripted/automated attack (which would show sub-second retries)."
+        },
+        {
+          "query": "SELECT device_fingerprint, geo, COUNT(*) FROM auth_events WHERE device_fingerprint = 'DEV-NEW-88f2' GROUP BY device_fingerprint, geo;",
+          "result_summary": "6 rows, all from the same never-seen device and London geo — a single new-device travel session, not multiple attackers or IPs."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Risk engine correctly locked the account for a legitimate traveller: new device + country change + 3 manual OTP failures, with clean KYC and no fraud flags.",
+      "correct": true
+    },
+    {
+      "text": "The account was actually compromised and someone else is trying to log in from London.",
+      "correct": false
+    },
+    {
+      "text": "Her registered phone number is out of service, so OTPs never actually arrived.",
+      "correct": false
+    },
+    {
+      "text": "A system-wide OTP outage caused all codes to fail for every customer that evening.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Verify identity (ID/liveness match against KYC tier 2), confirm risk score drivers are novelty-based (not automation), release the lock, and advise registering the new device.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Release the lock immediately based on her chat message alone, no verification.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Keep the account locked for 24-48 hours as a blanket security cooldown regardless of verification outcome.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Escalate to Compliance for an AML review before considering any unlock.",
+      "correct": false,
+      "quality": "wrong"
+    }
+  ],
+  "escalation": {
+    "required": false,
+    "target": null
+  },
+  "customer_expectation_timeframe": "Unlock within this chat session once identity is confirmed",
+  "model_reply": "Hi Grace, thanks for reaching out, and sorry this is happening while you're travelling. I can see your account was locked automatically because you logged in from a new device in a new country and had a few OTP mismatches in a row — that's a standard safety trigger, not a sign anything is wrong with your account. To release the lock, I just need to quickly confirm it's you: could you complete a quick ID check (I'll send the link now)? Once that's done I'll lift the restriction right away so you can log in and make your payment tonight. Going forward, I'd recommend registering this laptop as a trusted device from your settings once you're back in, so travel doesn't trigger this again.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Assumed account takeover or refused to consider the lock could be a false positive.",
+      "1": "Recognized it as a security lock but didn't identify the three specific triggering conditions.",
+      "2": "Identified new device + geo change + OTP failures but missed the human-paced (non-scripted) OTP timing as evidence of legitimacy.",
+      "3": "Correctly identifies all three trigger conditions and explains why the OTP timing pattern plus clean KYC support a legitimate traveller, not a takeover."
+    },
+    "tool_efficiency": {
+      "0": "Unlocked or refused to unlock without checking Auth & Risk Events.",
+      "1": "Checked Auth & Risk Events but not KYC Console.",
+      "2": "Checked both but didn't examine OTP attempt timing/spacing.",
+      "3": "Checked Auth & Risk Events (including OTP timing, ideally confirmed via the SQL query on auth_events showing ~45s gaps), KYC Console (fraud flags, match score), before deciding."
+    },
+    "compliance_safety": {
+      "0": "Unlocked with zero identity verification.",
+      "1": "Verified identity but via an insecure channel (e.g., asked for password over chat).",
+      "2": "Verified identity appropriately but did not advise device registration to prevent recurrence.",
+      "3": "Verified identity via the appropriate KYC/liveness step, unlocked, and advised registering the new device."
+    },
+    "communication_clarity": {
+      "0": "Reply sounds accusatory or implies she may be a fraudster.",
+      "1": "Plain language but no explanation of why the lock happened.",
+      "2": "Explains the lock but gives no timeframe for resolution.",
+      "3": "Reassures her, explains the lock in plain terms, gives a same-session unlock timeframe, and offers a forward-looking tip."
+    },
+    "escalation_judgment": {
+      "0": "Escalated to Compliance/Fraud team unnecessarily for a routine travel lock.",
+      "1": "Unsure whether to escalate, hedged in the reply.",
+      "2": "Correctly did not escalate but no clear reasoning given.",
+      "3": "Correctly resolved without escalation, recognizing this as a standard support-level identity verification case."
+    }
+  }
+}

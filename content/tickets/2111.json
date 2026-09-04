@@ -1,0 +1,255 @@
+{
+  "id": "INC-2111",
+  "title": "Crypto-to-fiat remittance: received less NGN than quoted",
+  "track": "Wallets & Crypto",
+  "difficulty": "medium",
+  "channel": "in-app chat",
+  "priority": "MEDIUM",
+  "sla_minutes": 120,
+  "customer": {
+    "name": "Segun Adeleke",
+    "kyc_tier": "Tier 3",
+    "country": "Nigeria",
+    "rails": [
+      "USDT-to-NGN remittance"
+    ],
+    "account_summary": "Wallet 10 months old, occasional crypto-to-NGN remittance, first pricing complaint."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-27T14:50:00+01:00",
+      "text": "Your app quoted me NGN 1,650 per USDT. I sent 300 USDT and expected NGN 495,000, but I only got NGN 486,555. Where is my missing NGN 8,445? This looks like you shortchanged me."
+    }
+  ],
+  "hidden_root_cause": "The quote of NGN 1,650/USDT was locked for 15 minutes from creation (14:02 to 14:17). Segun's exchange withdrawal took 41 minutes to actually settle (a known exchange batching delay outside our control), so his deposit was confirmed at 14:43 — 26 minutes after the quote expired. Per policy, a deposit arriving after quote expiry is converted at the live market rate at time of execution, which had moved to NGN 1,630/USDT (a real, modest ~1.2% rate shift over 41 minutes, not an error). A standard 0.5% off-ramp fee then applies on top, which Segun did not account for in his own mental math. The NGN 8,445 gap reconciles exactly: rate slippage (300 USDT x (1,650 - 1,630) = NGN 6,000) plus the 0.5% off-ramp fee on the executed amount (0.5% x NGN 489,000 = NGN 2,445) = NGN 8,445.",
+  "red_herring": "Segun frames this as being 'shortchanged', implying a calculation error or unfair practice; the numbers are fully explained by disclosed, standard policy (quote expiry + off-ramp fee), not an error — the job is to show the math transparently, not to assume fault on either side.",
+  "tools": {
+    "transaction_log": {
+      "columns": [
+        "reference",
+        "event",
+        "timestamp",
+        "rate_ngn_per_usdt",
+        "amount_usdt",
+        "fee_pct",
+        "detail"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-QT88213",
+          "event": "quote_created",
+          "timestamp": "2026-08-27T14:02:00+01:00",
+          "rate_ngn_per_usdt": 1650,
+          "amount_usdt": null,
+          "fee_pct": null,
+          "detail": "Quote generated, valid 15 minutes."
+        },
+        {
+          "reference": "TRX-QT88213",
+          "event": "quote_expires",
+          "timestamp": "2026-08-27T14:17:00+01:00",
+          "rate_ngn_per_usdt": 1650,
+          "amount_usdt": null,
+          "fee_pct": null,
+          "detail": "Quote lock window closed, no deposit received yet."
+        },
+        {
+          "reference": "TRX-QT88213",
+          "event": "deposit_confirmed",
+          "timestamp": "2026-08-27T14:43:00+01:00",
+          "rate_ngn_per_usdt": null,
+          "amount_usdt": 300,
+          "fee_pct": null,
+          "detail": "300 USDT deposit confirmed on-chain, 26 minutes after quote expiry."
+        },
+        {
+          "reference": "TRX-QT88213",
+          "event": "converted_at_live_rate",
+          "timestamp": "2026-08-27T14:43:05+01:00",
+          "rate_ngn_per_usdt": 1630,
+          "amount_usdt": 300,
+          "fee_pct": 0.5,
+          "detail": "Executed at live rate (1,630) since quote had expired. Gross: NGN 489,000 before fee; 0.5% off-ramp fee (NGN 2,445) then deducted to reach the final payout of NGN 486,555."
+        }
+      ],
+      "payout_breakdown": {
+        "quoted_gross_ngn": 495000,
+        "gross_ngn_at_execution_rate": 489000,
+        "fee_percent": 0.5,
+        "fee_ngn": 2445,
+        "final_payout_ngn": 486555,
+        "shortfall_vs_quoted_ngn": 8445,
+        "note": "Shortfall reconciles exactly to the naira: rate difference (300 USDT x (1,650 - 1,630) = NGN 6,000) plus the 0.5% off-ramp fee on the executed amount (NGN 2,445) = NGN 8,445."
+      }
+    },
+    "rates_tool": {
+      "rate_history_window": [
+        {
+          "timestamp": "2026-08-27T14:00:00+01:00",
+          "rate_ngn_per_usdt": 1651
+        },
+        {
+          "timestamp": "2026-08-27T14:10:00+01:00",
+          "rate_ngn_per_usdt": 1645
+        },
+        {
+          "timestamp": "2026-08-27T14:17:00+01:00",
+          "rate_ngn_per_usdt": 1640
+        },
+        {
+          "timestamp": "2026-08-27T14:30:00+01:00",
+          "rate_ngn_per_usdt": 1636
+        },
+        {
+          "timestamp": "2026-08-27T14:43:00+01:00",
+          "rate_ngn_per_usdt": 1630
+        }
+      ],
+      "fee_schedule": {
+        "off_ramp_fee_pct": 0.5,
+        "applies_to": "All USDT-to-NGN conversions",
+        "disclosed_at_quote_time": true
+      }
+    },
+    "knowledge_base": [
+      {
+        "title": "Quote locks & rate slippage",
+        "body": "Quotes are locked for 15 minutes from creation. If the customer's deposit is not confirmed within that window, the conversion executes at the live market rate at the time of confirmation, not the originally quoted rate. This is disclosed in the quote terms. Exchange withdrawal delays (common due to batching or network congestion) are outside our control but are a frequent cause of missed quote windows. Support should show the customer the exact timestamps and rate history to build trust, and may offer a one-time goodwill fee waiver for a first-time occurrence if policy allows, but should not refund the rate difference itself."
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "quotes",
+      "schema": [
+        "reference",
+        "event",
+        "timestamp",
+        "rate_ngn_per_usdt",
+        "amount_usdt",
+        "fee_pct"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-QT88213",
+          "event": "quote_created",
+          "timestamp": "2026-08-27T14:02:00+01:00",
+          "rate_ngn_per_usdt": 1650,
+          "amount_usdt": null,
+          "fee_pct": null,
+          "detail": "Quote generated, valid 15 minutes."
+        },
+        {
+          "reference": "TRX-QT88213",
+          "event": "quote_expires",
+          "timestamp": "2026-08-27T14:17:00+01:00",
+          "rate_ngn_per_usdt": 1650,
+          "amount_usdt": null,
+          "fee_pct": null,
+          "detail": "Quote lock window closed, no deposit received yet."
+        },
+        {
+          "reference": "TRX-QT88213",
+          "event": "deposit_confirmed",
+          "timestamp": "2026-08-27T14:43:00+01:00",
+          "rate_ngn_per_usdt": null,
+          "amount_usdt": 300,
+          "fee_pct": null,
+          "detail": "300 USDT deposit confirmed on-chain, 26 minutes after quote expiry."
+        },
+        {
+          "reference": "TRX-QT88213",
+          "event": "converted_at_live_rate",
+          "timestamp": "2026-08-27T14:43:05+01:00",
+          "rate_ngn_per_usdt": 1630,
+          "amount_usdt": 300,
+          "fee_pct": 0.5,
+          "detail": "Executed at live rate (1,630) since quote had expired. Gross: NGN 489,000 before fee; 0.5% off-ramp fee (NGN 2,445) then deducted to reach the final payout of NGN 486,555."
+        }
+      ],
+      "suggested_queries": [
+        {
+          "query": "SELECT event, timestamp, rate_ngn_per_usdt FROM quotes WHERE reference = 'TRX-QT88213' ORDER BY timestamp;",
+          "result_summary": "4 rows showing quote_created (14:02, rate 1650), quote_expires (14:17), deposit_confirmed (14:43), converted_at_live_rate (14:43:05, rate 1630) — the 26-minute gap between quote_expires and deposit_confirmed is the entire story."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Quote expired 26 minutes before the deposit confirmed (exchange withdrawal took 41 minutes); conversion executed at the live rate (1,630 vs quoted 1,650), plus the standard 0.5% off-ramp fee, together explaining the shortfall.",
+      "correct": true
+    },
+    {
+      "text": "Our system made a calculation error and shortchanged the customer.",
+      "correct": false
+    },
+    {
+      "text": "The customer sent less than 300 USDT despite claiming otherwise.",
+      "correct": false
+    },
+    {
+      "text": "A hidden fee was charged that is not disclosed anywhere in policy.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Explain the timeline with exact timestamps (quote created, expired, deposit confirmed) and the two components (rate change + disclosed fee); no refund owed, but offer a one-time goodwill fee waiver if policy allows for a first occurrence.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Refund the full NGN 8,445 gap immediately as a customer service gesture with no explanation.",
+      "correct": false,
+      "quality": "acceptable_but_risky"
+    },
+    {
+      "text": "Tell the customer the app never guarantees quotes and end the conversation with no further detail.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Blame the customer's exchange entirely and offer no path forward or goodwill.",
+      "correct": false,
+      "quality": "wrong"
+    }
+  ],
+  "escalation": {
+    "required": false,
+    "target": null
+  },
+  "customer_expectation_timeframe": "Explanation immediate; goodwill fee waiver (if approved) processed same-day",
+  "model_reply": "Hi Segun, thanks for flagging this — let me walk you through exactly what happened, because the numbers do add up, just not the way you'd expect. Your quote of NGN 1,650/USDT was created at 14:02 and was only valid for 15 minutes (until 14:17). Your deposit didn't actually confirm on our end until 14:43 — it looks like your exchange's withdrawal took about 41 minutes to settle, which is outside either of our control but did push you past the quote window. Because the quote had expired, your 300 USDT converted at the live market rate at that moment, which had moved to NGN 1,630 — rates do shift even over 20-40 minutes. That rate difference is NGN 6,000 of the gap (300 USDT x NGN 20), with our standard 0.5% off-ramp fee (disclosed at quote time, NGN 2,445 on this amount) making up the rest — together that is your NGN 8,445. So nothing was miscalculated or hidden — the quote simply expired before your funds arrived. Since this is your first time hitting this, I can offer a one-time goodwill waiver of the 0.5% fee (NGN 2,445) for this transaction as a gesture; I don't have the ability to adjust for the rate movement itself since that's a live market rate at the time of execution. For future transfers, sending from a wallet or exchange with faster withdrawal settlement (or choosing a floating-rate order if your platform offers one) will help you lock in quoted rates more reliably.",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Assumed a calculation error or hidden fee.",
+      "1": "Identified 'the quote expired' generically without citing exact timestamps or the rate history.",
+      "2": "Cited timestamps and rate change but omitted the fee component, or vice versa.",
+      "3": "Correctly explains both components (quote expiry due to slow exchange withdrawal, resulting live-rate execution) and the disclosed 0.5% fee, with exact timestamps."
+    },
+    "tool_efficiency": {
+      "0": "Did not open Transaction Log or Rates tool before responding.",
+      "1": "Opened Transaction Log only, without checking the Rates tool's history for corroboration.",
+      "2": "Checked both but didn't reference the KB article on quote locks/slippage policy.",
+      "3": "Checked Transaction Log (quote/deposit timestamps, confirmed via the SQL query ordered by timestamp), Rates tool (rate history), and the KB article on quote-lock policy before explaining."
+    },
+    "compliance_safety": {
+      "0": "Refunded the rate difference outright, effectively guaranteeing quotes indefinitely (policy violation).",
+      "1": "Refused any goodwill gesture and offered nothing constructive.",
+      "2": "Offered a reasonable gesture but didn't clearly explain it does not cover the rate movement.",
+      "3": "Correctly declines to refund the rate-driven portion, offers a policy-compliant one-time fee waiver only, and is transparent about what is and isn't adjustable."
+    },
+    "communication_clarity": {
+      "0": "Reply is confusing or fails to show the actual math/timeline.",
+      "1": "Shows some numbers but no clear cause-and-effect narrative.",
+      "2": "Clear explanation but no forward-looking advice for future transfers.",
+      "3": "Clear, timestamped walkthrough of both cost components, plus practical advice to avoid recurrence (faster settlement / floating-rate option)."
+    },
+    "escalation_judgment": {
+      "0": "Escalated to Crypto Ops/Compliance unnecessarily for a routine, explainable pricing question.",
+      "1": "Unsure whether to escalate, hedged.",
+      "2": "Correctly did not escalate but gave no reasoning.",
+      "3": "Correctly resolved without escalation, recognizing this as a standard pricing-transparency case resolvable with existing tools and policy."
+    }
+  }
+}

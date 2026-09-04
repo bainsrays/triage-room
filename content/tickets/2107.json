@@ -1,0 +1,197 @@
+{
+  "id": "INC-2107",
+  "title": "Chargeback dispute from merchant side",
+  "track": "Merchant/API",
+  "difficulty": "medium",
+  "channel": "merchant support ticket",
+  "priority": "MEDIUM",
+  "sla_minutes": 240,
+  "customer": {
+    "name": "Ngozi Eze (Operations Manager, Bloom Home Decor)",
+    "kyc_tier": "Merchant Tier 2 (verified business)",
+    "country": "Nigeria",
+    "rails": [
+      "Card checkout, 3-D Secure enabled"
+    ],
+    "account_summary": "Merchant integration live 2 years, first chargeback in 6 months."
+  },
+  "messages": [
+    {
+      "from": "customer",
+      "timestamp": "2026-08-26T10:00:00+01:00",
+      "text": "A customer has disputed an order for NGN 85,000, reason given is 'item not received'. We definitely delivered this — we have a signed delivery note. What do we need to do? Are we going to lose this money automatically?"
+    }
+  ],
+  "hidden_root_cause": "This is a legitimate sale with strong supporting evidence: the transaction passed 3-D Secure (proving cardholder authentication), the billing address matched (AVS match), and there is a signed delivery confirmation on file. This is not a system error or fraud on our side — it is a standard 'friendly fraud' or genuine miscommunication dispute that the merchant can and should contest with evidence (a 'representment'), within the card network's 7-day response deadline. The merchant does not automatically lose the money; they have a real chance to win if they submit compelling evidence in time.",
+  "red_herring": "Ngozi's fear that they will 'automatically lose the money' suggests urgency to just refund and move on — but refunding preemptively forfeits a case they have strong evidence to win, and is not required or advisable given the 3DS pass and delivery confirmation.",
+  "tools": {
+    "customer_360": {
+      "profile": {
+        "name": "Bloom Home Decor (merchant account)",
+        "contact": "Ngozi Eze, Operations Manager",
+        "kyc_tier": "Merchant Tier 2",
+        "integration_age": "2 years",
+        "notes": "First chargeback in 6 months. Otherwise clean dispute history."
+      }
+    },
+    "chargeback_tool": {
+      "case": {
+        "case_id": "CB-77213",
+        "order_reference": "ORD-556812",
+        "amount_ngn": 85000,
+        "reason_code": "13.1",
+        "reason_label": "Merchandise/Services Not Received",
+        "deadline": "2026-09-02T23:59:00+01:00",
+        "days_remaining": 7,
+        "status": "AWAITING_MERCHANT_RESPONSE"
+      },
+      "representment_requirements": [
+        "Proof of delivery (signed note, courier tracking, or delivery photo)",
+        "3DS authentication result for the transaction",
+        "AVS match result",
+        "Any customer communication confirming receipt (if available)"
+      ]
+    },
+    "transaction_log": {
+      "columns": [
+        "reference",
+        "timestamp",
+        "amount_ngn",
+        "3ds_result",
+        "avs_result",
+        "status"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-772A01",
+          "timestamp": "2026-08-14T16:22:00+01:00",
+          "amount_ngn": 85000,
+          "3ds_result": "AUTHENTICATED (frictionless)",
+          "avs_result": "MATCH",
+          "status": "CAPTURED"
+        }
+      ]
+    },
+    "order_log": {
+      "order_reference": "ORD-556812",
+      "delivery_status": "DELIVERED",
+      "delivery_confirmation": {
+        "type": "Signed delivery note",
+        "signed_by": "O. Eze (recipient, matches billing name on file)",
+        "delivered_at": "2026-08-18T14:10:00+01:00",
+        "courier_tracking_id": "CRR-9981221"
+      }
+    },
+    "knowledge_base": [
+      {
+        "title": "Chargeback reason code 13.1: Item Not Received",
+        "body": "Merchants can contest 'item not received' disputes with delivery proof (signed note, courier tracking with delivery confirmation, or photo), plus 3DS authentication and AVS match results if available. Representment must be submitted before the deadline. Do not proactively refund before the deadline unless evidence is clearly insufficient — doing so forfeits a winnable case."
+      }
+    ],
+    "sql_scratchpad": {
+      "table": "transactions",
+      "schema": [
+        "reference",
+        "timestamp",
+        "amount_ngn",
+        "3ds_result",
+        "avs_result",
+        "status"
+      ],
+      "rows": [
+        {
+          "reference": "TRX-772A01",
+          "timestamp": "2026-08-14T16:22:00+01:00",
+          "amount_ngn": 85000,
+          "3ds_result": "AUTHENTICATED (frictionless)",
+          "avs_result": "MATCH",
+          "status": "CAPTURED"
+        }
+      ],
+      "suggested_queries": [
+        {
+          "query": "SELECT reference, 3ds_result, avs_result, status FROM transactions WHERE reference = 'TRX-772A01';",
+          "result_summary": "1 row: 3ds_result=AUTHENTICATED (frictionless), avs_result=MATCH, status=CAPTURED — this is the exact evidence bundle a representment needs, confirming it's not a system error or unauthorized charge."
+        }
+      ]
+    }
+  },
+  "root_cause_options": [
+    {
+      "text": "Legitimate delivered sale with 3DS authentication and signed delivery proof; a standard contestable 'item not received' dispute, not an automatic loss.",
+      "correct": true
+    },
+    {
+      "text": "The transaction is fraudulent and the merchant should refund immediately.",
+      "correct": false
+    },
+    {
+      "text": "Our system mistakenly captured a payment that was never actually authorized.",
+      "correct": false
+    },
+    {
+      "text": "The delivery note is invalid because it doesn't match the cardholder's name exactly.",
+      "correct": false
+    }
+  ],
+  "resolution_options": [
+    {
+      "text": "Submit a representment before the 7-day deadline including the signed delivery proof, 3DS authentication result, and AVS match; advise the merchant not to refund preemptively.",
+      "correct": true,
+      "quality": "best"
+    },
+    {
+      "text": "Advise the merchant to refund the customer right away to avoid any risk.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Tell the merchant nothing can be done and the chargeback will proceed automatically.",
+      "correct": false,
+      "quality": "wrong"
+    },
+    {
+      "text": "Submit the delivery note alone without mentioning 3DS or AVS results.",
+      "correct": false,
+      "quality": "acceptable_but_risky"
+    }
+  ],
+  "escalation": {
+    "required": false,
+    "target": null
+  },
+  "customer_expectation_timeframe": "Representment must be submitted within 7 days (by 2026-09-02); card network decision typically follows within 30-45 days after that",
+  "model_reply": "Hi Ngozi, good news — you are not automatically losing this money, and you have a strong case to contest it. Looking at order ORD-556812: the transaction was authenticated via 3D Secure, the billing address matched, and you have a signed delivery note from 18 August confirming receipt. This is a standard 'item not received' dispute, and merchants win these regularly when the evidence is this solid. I'd recommend submitting a representment with all three pieces of evidence (delivery proof, 3DS result, AVS match) before the deadline of 2 September — I can help you package that now. Please don't refund the customer in the meantime; doing so would close out a case you have a real chance of winning. I'll confirm once your representment is submitted, and let you know the network's decision timeline (usually 30-45 days after submission).",
+  "rubric": {
+    "root_cause_accuracy": {
+      "0": "Advised refunding as if the merchant has no case, or treated it as a system error.",
+      "1": "Recognized it's a legitimate sale but didn't cite the specific evidence (3DS, AVS, delivery proof).",
+      "2": "Cited some evidence but understated the merchant's chance of winning.",
+      "3": "Correctly frames this as a legitimate, well-evidenced sale and a standard contestable dispute, citing 3DS pass, AVS match, and signed delivery proof."
+    },
+    "tool_efficiency": {
+      "0": "Did not check the Chargeback tool or Order Log before responding.",
+      "1": "Checked Chargeback case details but not the Order Log delivery confirmation.",
+      "2": "Checked case + delivery info but not the Transaction Log's 3DS/AVS results.",
+      "3": "Checked Chargeback case (deadline, reason code), Transaction Log (3DS/AVS, confirmed via SQL lookup by reference), and Order Log (delivery proof) before advising."
+    },
+    "compliance_safety": {
+      "0": "Told the merchant the dispute is 'automatically theirs to lose' or guaranteed a win.",
+      "1": "Gave balanced framing but no mention of the deadline urgency.",
+      "2": "Mentioned the deadline but not the risk of preemptive refunding.",
+      "3": "Accurately frames this as winnable-but-not-guaranteed, states the deadline clearly, and warns against preemptive refunding."
+    },
+    "communication_clarity": {
+      "0": "Vague or unclear about what evidence to submit.",
+      "1": "Names required evidence but no deadline given.",
+      "2": "Names evidence and deadline but no reassurance addressing her fear of automatic loss.",
+      "3": "Directly addresses her fear (not automatic loss), lists exact evidence needed, states the deadline, and offers help packaging it."
+    },
+    "escalation_judgment": {
+      "0": "Escalated to Compliance/Fraud unnecessarily for a standard representment case.",
+      "1": "Unsure whether escalation was needed, hedged.",
+      "2": "Correctly did not escalate but gave no reasoning.",
+      "3": "Correctly resolved without escalation, recognizing this as standard merchant-support chargeback handling within existing tooling."
+    }
+  }
+}

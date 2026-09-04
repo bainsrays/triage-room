@@ -1,0 +1,19 @@
+# internal planning docs (not part of the public project)
+SPEC.md
+COMPETITORS.md
+LINKEDIN-LAUNCH-POST.md
+BUILD-NOTES.md
+design/
+scratch/
+content/add_required_payload.py
+content/patch_rubric.py
+
+# build / tooling
+app/node_modules/
+app/dist/
+app/.vercel/
+app/qa/
+app/*.out.txt
+app/*.err.txt
+.DS_Store
+Thumbs.db
