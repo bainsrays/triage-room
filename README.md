@@ -10,7 +10,7 @@ Built by Sodiq as a portfolio piece. No backend, no accounts, no data collection
 
 | Path | What it is |
 | --- | --- |
-| `content/tickets/*.json` | The eleven tickets. Single source of truth: customer thread, tool data, seeded SQL table, red herring, root-cause and resolution options, escalation ground truth, reference reply, rubric anchors per axis. |
+| `content/tickets/21xx.json` | The eleven tickets. Single source of truth: customer thread, tool data, seeded SQL table, red herring, root-cause and resolution options, escalation ground truth, reference reply, rubric anchors per axis. |
 | `content/tickets.json` | Merged output of the per-ticket files (`content/merge_tickets.py`). |
 | `content/rubric.md` | The public scoring rubric, tone rules, and known limitations. Rendered as-is on `/how-scoring-works`. |
 | `content/REDTEAM-REVIEW.md` | Domain review of every ticket before launch: what was wrong (KYC tier, NIP settlement clock, wire identifiers, chain decimals, FX arithmetic) and how it was fixed. Also the answers to the ten most likely expert objections. |
@@ -43,7 +43,7 @@ powershell -File scripts/run-hostile.ps1
 
 ## Add or fix a ticket
 
-1. Edit or add `content/tickets/INC-21xx.json`. Keep exactly one `correct: true` root cause and write each distractor so a tool data point contradicts it.
+1. Edit or add `content/tickets/21xx.json`. Keep exactly one `correct: true` root cause and write each distractor so a tool data point contradicts it.
 2. `python content/merge_tickets.py` to regenerate `content/tickets.json`.
 3. `cd app && npm run build && npm test`. The build copies content first, so the app can never ship stale ticket data.
 
