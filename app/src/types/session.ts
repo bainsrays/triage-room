@@ -55,6 +55,7 @@ export const SHIFT_STATE_SCHEMA_VERSION = 1;
 
 export interface ShiftState {
   schemaVersion: number;
+  resetId?: string;
   shiftStartedAt: number | null;
   tickets: Record<string, TicketWorkState>;
   scores: Record<string, TicketScoreResult>;

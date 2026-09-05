@@ -19,7 +19,7 @@ Built by Sodiq as a portfolio piece. No backend, no accounts, no data collection
 
 ## Scoring in one paragraph
 
-Five axes, 0 to 3 each, 15 points scaled to 100. **Root-Cause Accuracy** and **Compliance Safety** compare your root-cause and resolution choices with the ticket's ground truth and scan the reply for unsafe promises. **Tool Efficiency** checks that you opened every evidence tool, read the KB article (where one exists) and confirmed the evidence with a successful read-only SQL query against the ticket's table. **Communication Clarity** checks the reply for the customer's name, a concrete next step, a realistic timeframe, no jargon dumps, and no banned over-promising phrases; it also flags full card numbers (Luhn-checked), BVNs and secret keys. **Escalation Judgment** requires the right team with the ticket-specific payload attached, and penalises escalating a ticket that should have been self-resolved. Picking every right answer without opening any tool scores 73, not 100.
+Five axes, 0 to 3 each, 15 points scaled to 100. **Root-Cause Accuracy** and **Compliance Safety** compare your root-cause and resolution choices with the ticket's ground truth and scan the reply for unsafe promises. **Tool Efficiency** checks that you opened every evidence tool, read the KB article (where one exists) and confirmed the evidence with a successful read-only SQL query against the ticket's table. **Communication Clarity** checks the reply for the customer's name, a concrete next step, a realistic timeframe, no jargon dumps, and no banned over-promising phrases; it also flags full card numbers (Luhn-checked), BVNs and secret keys. **Escalation Judgment** requires the right team with the ticket-specific payload attached, and penalises escalating a ticket that should have been self-resolved. Tool Efficiency is 0 with no evidence tools recorded, 1 with only some, 2 with all evidence tools but missing KB or SQL confirmation, and 3 with every applicable confirmation. A correct root cause scores only 1 while any required evidence tool is unopened. With the other three axes perfect, that means a maximum of 67/100 with no evidence tools recorded, or 73/100 with only some; these are ceilings, not guaranteed scores. The initially visible tool is recorded automatically, but Customer 360 is background context and does not count as evidence. KB credit requires explicitly opening an article; closing it does not remove credit.
 
 Read `content/rubric.md`, including **Known limitations**, before critiquing. The reply checks are rule-based, not language understanding, and the repo says so.
 
@@ -29,7 +29,7 @@ Read `content/rubric.md`, including **Known limitations**, before critiquing. Th
 cd app
 npm install
 npm run build      # copies content/ into src/, type-checks, builds
-npm test           # 69 unit tests: scoring engine, composer checks, SQL guard
+npm test           # scoring, composer checks, SQL worker/guard, persistence, evidence and KB
 npm run preview    # http://localhost:4173
 ```
 
@@ -40,6 +40,15 @@ cd app
 npx playwright install chromium
 powershell -File scripts/run-hostile.ps1
 ```
+
+Focused browser regressions (also requires Playwright and its Chromium):
+
+```bash
+cd app
+node scripts/regressions.mjs
+```
+
+This starts and stops its own local Vite server and isolated browser. It checks all ticket SQL seeds, cross-ticket navigation, simultaneous-tab drafts, reset synchronization, nested evidence, KB disclosure, and unavailable storage. Cross-tab writes are serialized with Web Locks on supported secure origins (HTTPS or localhost); older browsers without Web Locks use best-effort read/merge/write persistence. If storage is unavailable, work remains in memory for the current page only.
 
 ## Add or fix a ticket
 

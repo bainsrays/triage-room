@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { formatTicketTime } from "../lib/shiftClock";
 
 interface TableShape {
+  [key: string]: unknown;
   columns: string[];
   rows: Record<string, unknown>[];
   status_history?: { timestamp: string; status: string; note: string }[];
@@ -45,12 +46,13 @@ function KeyValueGrid({ obj }: { obj: Record<string, unknown> }) {
 }
 
 function NestedValue({ value }: { value: unknown }): ReactNode {
+  if (isTableShape(value)) return <DataTable table={value} />;
   if (Array.isArray(value)) {
     return (
       <ul className="grid gap-1">
         {value.map((item, i) => (
           <li key={i} className="text-[12.5px] text-ink-2 [overflow-wrap:anywhere]">
-            {typeof item === "object" && item !== null ? <NestedObjectLine obj={item as Record<string, unknown>} /> : String(item)}
+            <NestedValue value={item} />
           </li>
         ))}
       </ul>
@@ -59,20 +61,11 @@ function NestedValue({ value }: { value: unknown }): ReactNode {
   if (value && typeof value === "object") {
     return <KeyValueGrid obj={value as Record<string, unknown>} />;
   }
-  return <>{String(value)}</>;
-}
-
-function NestedObjectLine({ obj }: { obj: Record<string, unknown> }) {
-  return (
-    <span className="font-mono text-[12px]">
-      {Object.entries(obj)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(" · ")}
-    </span>
-  );
+  return <>{formatCell(value)}</>;
 }
 
 function DataTable({ table }: { table: TableShape }) {
+  const { columns, rows, status_history, ...metadata } = table;
   return (
     <div className="grid gap-3">
       <div className="overflow-x-auto rounded-lg border border-line">
@@ -98,7 +91,7 @@ function DataTable({ table }: { table: TableShape }) {
                 <tr key={i} className="border-b border-line last:border-b-0">
                   {table.columns.map((col) => (
                     <td key={col} className="whitespace-nowrap px-3 py-2 font-mono text-ink">
-                      {formatCell(row[col])}
+                      <NestedValue value={row[col]} />
                     </td>
                   ))}
                 </tr>
@@ -122,6 +115,7 @@ function DataTable({ table }: { table: TableShape }) {
           </ol>
         </div>
       )}
+      {Object.keys(metadata).length > 0 && <KeyValueGrid obj={metadata} />}
     </div>
   );
 }
@@ -147,7 +141,7 @@ export default function ToolPanel({ toolKey, data }: { toolKey: string; data: un
       <ul className="grid gap-1.5">
         {data.map((item, i) => (
           <li key={i} className="rounded-md border border-line bg-surface-sunken/50 px-3 py-2 text-[12.5px] text-ink-2">
-            {typeof item === "object" && item !== null ? <NestedObjectLine obj={item as Record<string, unknown>} /> : String(item)}
+            <NestedValue value={item} />
           </li>
         ))}
       </ul>
@@ -170,7 +164,7 @@ export default function ToolPanel({ toolKey, data }: { toolKey: string; data: un
               <ul className="grid gap-1.5">
                 {value.map((item, i) => (
                   <li key={i} className="rounded-md border border-line bg-surface-sunken/50 px-3 py-2 text-[12.5px] text-ink-2">
-                    {typeof item === "object" && item !== null ? <NestedObjectLine obj={item as Record<string, unknown>} /> : String(item)}
+                    <NestedValue value={item} />
                   </li>
                 ))}
               </ul>

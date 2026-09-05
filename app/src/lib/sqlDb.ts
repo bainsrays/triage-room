@@ -32,15 +32,18 @@ interface RawSqlScratchpad {
   suggested_queries?: SuggestedQuery[];
 }
 
+export function quoteSqlIdentifier(name: string): string {
+  return '"' + name.replace(/"/g, '""') + '"';
+}
+
 /** Extracts this ticket's single seeded table + suggested queries from `tools.sql_scratchpad`. */
 export function extractSeedTables(ticket: Ticket): { tables: SeededTableInfo[]; suggestedQueries: SuggestedQuery[] } {
   const raw = ticket.tools.sql_scratchpad as RawSqlScratchpad | undefined;
   if (!raw || !raw.table || !Array.isArray(raw.schema) || !Array.isArray(raw.rows)) {
     return { tables: [], suggestedQueries: [] };
   }
-  const tableName = raw.table.replace(/[^a-zA-Z0-9_]/g, "_");
   return {
-    tables: [{ name: tableName, columns: raw.schema, rows: raw.rows }],
+    tables: [{ name: raw.table, columns: raw.schema, rows: raw.rows }],
     suggestedQueries: raw.suggested_queries ?? [],
   };
 }

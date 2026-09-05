@@ -11,6 +11,23 @@ import SqlScratchpad from "../components/SqlScratchpad";
 import { runComposerChecks } from "../scoring/composerChecks";
 import { formatTicketTime } from "../lib/shiftClock";
 
+export function KnowledgeBaseArticle({ item, onOpen }: {
+  item: { title: string; body: string };
+  onOpen: () => void;
+}) {
+  return (
+    <details
+      className="kb-item w-full text-left"
+      onToggle={(event) => {
+        if (event.currentTarget.open) onOpen();
+      }}
+    >
+      <summary className="cursor-pointer text-[12.5px] font-semibold text-ink">{item.title}</summary>
+      <p className="mt-1 text-[11.5px] leading-relaxed text-muted">{item.body}</p>
+    </details>
+  );
+}
+
 export default function WorkspacePage() {
   const { ticketId } = useParams<{ ticketId: string }>();
   const navigate = useNavigate();
@@ -148,6 +165,7 @@ export default function WorkspacePage() {
               Investigation tools
             </h2>
             <ToolTabs
+              key={`${ticket.id}-${state.resetId ?? "initial"}`}
               tools={Object.fromEntries(Object.entries(ticket.tools).filter(([k]) => k !== "sql_scratchpad" && k !== "knowledge_base"))}
               onOpenTool={handleOpenTool}
             />
@@ -171,7 +189,7 @@ export default function WorkspacePage() {
                 Efficiency, the same way a senior investigator would check the ledger rather than trust the panel.
               </p>
             )}
-            {showScratchpad && <SqlScratchpad ticket={ticket} revealed={revealed} />}
+            {showScratchpad && <SqlScratchpad key={`${ticket.id}-${state.resetId ?? "initial"}`} ticket={ticket} revealed={revealed} />}
           </section>
 
           {/* Root cause */}
@@ -264,16 +282,13 @@ export default function WorkspacePage() {
             </h2>
             {Array.isArray(ticket.tools.knowledge_base) ? (
               <div className="grid gap-2">
+                <p className="text-[11.5px] text-muted">Open an article to read it and record KB credit.</p>
                 {(ticket.tools.knowledge_base as { title: string; body: string }[]).map((item, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => markKbOpened(ticket.id)}
-                    className="kb-item w-full text-left"
-                  >
-                    <h3 className="text-[12.5px] font-semibold text-ink">{item.title}</h3>
-                    <p className="mt-1 text-[11.5px] leading-relaxed text-muted">{item.body}</p>
-                  </button>
+                  <KnowledgeBaseArticle
+                    key={`${ticket.id}-${state.resetId ?? "initial"}-${i}`}
+                    item={item}
+                    onOpen={() => markKbOpened(ticket.id)}
+                  />
                 ))}
               </div>
             ) : (

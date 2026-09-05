@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   EscalationChoice,
@@ -7,8 +7,8 @@ import type {
   TicketWorkState,
   ToolOpenEvent,
 } from "../types/session";
-import { emptyShiftState, emptyTicketWorkState } from "../types/session";
-import { clearShiftState, loadShiftState, saveShiftState } from "./persistence";
+import { emptyShiftState, emptyTicketWorkState, SHIFT_STATE_STORAGE_KEY } from "../types/session";
+import { loadShiftState, loadWorkingShiftState, updateShiftState } from "./persistence";
 import { scoreTicket } from "../scoring/engine";
 import type { Ticket } from "../types/ticket";
 
@@ -32,10 +32,37 @@ const ShiftContext = createContext<ShiftContextValue | null>(null);
 
 export function ShiftProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ShiftState>(() => loadShiftState());
+  const currentState = useRef(state);
+  const committedState = useRef(state);
+  const pendingUpdates = useRef(0);
+  const persistenceQueue = useRef(Promise.resolve());
+
+  const updateState = useCallback((updater: (previous: ShiftState) => ShiftState) => {
+    currentState.current = updater(currentState.current);
+    setState(currentState.current);
+    pendingUpdates.current += 1;
+    persistenceQueue.current = persistenceQueue.current.then(() => updateShiftState(updater, () => committedState.current)).then((next) => {
+      committedState.current = next;
+      pendingUpdates.current -= 1;
+      if (pendingUpdates.current === 0) {
+        currentState.current = next;
+        setState(next);
+      }
+    });
+  }, []);
 
   useEffect(() => {
-    saveShiftState(state);
-  }, [state]);
+    const syncState = (event: StorageEvent) => {
+      if (event.key !== SHIFT_STATE_STORAGE_KEY && event.key !== null) return;
+      if (event.storageArea !== window.localStorage || pendingUpdates.current > 0) return;
+      const latest = loadWorkingShiftState(() => committedState.current);
+      committedState.current = latest;
+      currentState.current = latest;
+      setState(latest);
+    };
+    window.addEventListener("storage", syncState);
+    return () => window.removeEventListener("storage", syncState);
+  }, []);
 
   const getTicketWork = useCallback(
     (ticketId: string): TicketWorkState => state.tickets[ticketId] ?? emptyTicketWorkState(ticketId),
@@ -43,21 +70,21 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
   );
 
   const updateTicket = useCallback((ticketId: string, updater: (work: TicketWorkState) => TicketWorkState) => {
-    setState((prev) => {
+    updateState((prev) => {
       const current = prev.tickets[ticketId] ?? emptyTicketWorkState(ticketId);
       const next = updater(current);
       return { ...prev, tickets: { ...prev.tickets, [ticketId]: next } };
     });
-  }, []);
+  }, [updateState]);
 
   const startShift = useCallback(() => {
-    setState((prev) => ({ ...prev, shiftStartedAt: prev.shiftStartedAt ?? Date.now() }));
-  }, []);
+    updateState((prev) => ({ ...prev, shiftStartedAt: prev.shiftStartedAt ?? Date.now() }));
+  }, [updateState]);
 
   const resetShift = useCallback(() => {
-    clearShiftState();
-    setState(emptyShiftState());
-  }, []);
+    const resetId = crypto.randomUUID();
+    updateState(() => ({ ...emptyShiftState(), resetId }));
+  }, [updateState]);
 
   const markToolOpened = useCallback(
     (ticketId: string, toolKey: string) => {
@@ -129,7 +156,7 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
 
   const submitTicket = useCallback(
     (ticket: Ticket) => {
-      setState((prev) => {
+      updateState((prev) => {
         const current = prev.tickets[ticket.id] ?? emptyTicketWorkState(ticket.id);
         const submitted: TicketWorkState = { ...current, status: "resolved", submittedAt: Date.now() };
         const score = scoreTicket(ticket, submitted);
@@ -140,7 +167,7 @@ export function ShiftProvider({ children }: { children: ReactNode }) {
         };
       });
     },
-    []
+    [updateState]
   );
 
   const value = useMemo<ShiftContextValue>(

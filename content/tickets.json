@@ -1529,7 +1529,7 @@
           ],
           "suggested_queries": [
             {
-              "query": "SELECT reference, 3ds_result, avs_result, status FROM transactions WHERE reference = 'TRX-772A01';",
+              "query": "SELECT reference, \"3ds_result\", avs_result, status FROM transactions WHERE reference = 'TRX-772A01';",
               "result_summary": "1 row: 3ds_result=AUTHENTICATED (frictionless), avs_result=MATCH, status=CAPTURED — this is the exact evidence bundle a representment needs, confirming it's not a system error or unauthorized charge."
             }
           ]

@@ -1,13 +1,13 @@
 import { useState } from "react";
 import type { Ticket } from "../types/ticket";
 import { evaluateSqlQuery } from "../lib/sqlGuard";
-import { extractSeedTables, runSqlQuery } from "../lib/sqlDb";
+import { extractSeedTables, quoteSqlIdentifier, runSqlQuery } from "../lib/sqlDb";
 import { useShift } from "../lib/ShiftContext";
 
 export default function SqlScratchpad({ ticket, revealed = false }: { ticket: Ticket; revealed?: boolean }) {
   const { recordSqlQuery } = useShift();
   const { tables, suggestedQueries } = extractSeedTables(ticket);
-  const defaultQuery = tables[0] ? `SELECT * FROM ${tables[0].name} LIMIT 10;` : "SELECT 1;";
+  const defaultQuery = tables[0] ? `SELECT * FROM ${quoteSqlIdentifier(tables[0].name)} LIMIT 10;` : "SELECT 1;";
   const [query, setQuery] = useState(defaultQuery);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +91,7 @@ export default function SqlScratchpad({ ticket, revealed = false }: { ticket: Ti
             <button
               key={t.name}
               type="button"
-              onClick={() => setQuery(`SELECT * FROM ${t.name} LIMIT 10;`)}
+              onClick={() => setQuery(`SELECT * FROM ${quoteSqlIdentifier(t.name)} LIMIT 10;`)}
               className="rounded-md border border-white/15 bg-white/5 px-2 py-1 font-mono text-[11px] text-white/80 hover:bg-white/10"
             >
               {t.name}

@@ -22,6 +22,21 @@ Did you check evidence *before* committing to a diagnosis, and did you check the
 - **2** — Opened the right tools but skipped a confirmation step: the Knowledge Base article that states the actual policy (where the ticket has one), or the read-only SQL query against the ticket's seeded table.
 - **3** — Opened every tool relevant to this ticket's evidence trail (transaction/webhook/auth logs, crypto monitor, rates — whichever apply), confirmed the evidence with a successful read-only SQL query against the ticket's table, *and* read the relevant KB article (where one exists) before diagnosing.
 
+### Tool score calculation and recorded reads
+
+Evidence tools are every ticket tool except `customer_360`, `knowledge_base`, and `sql_scratchpad`. Let `opened` be the number of distinct evidence tools recorded and `required` the number available. The engine applies these cases in order:
+
+- **0** if `opened = 0`.
+- **1** if `0 < opened < required`.
+- **2** if all evidence tools are recorded but an available KB article has not been opened, or an available SQL table has not been confirmed.
+- **3** otherwise: all evidence tools and every applicable confirmation are recorded.
+
+KB is satisfied when the ticket has no articles or at least one article has been explicitly opened. Articles start collapsed; use the article summary to open and read one. Closing it does not revoke credit. SQL confirmation requires an allowed query with no recorded error whose text includes the seeded table name (case-insensitive); the engine does not judge the query's diagnostic quality or require a nonempty result.
+
+The initial visible tool tab is recorded automatically. A visible Customer 360 tab is background context, not evidence credit. Thus "no extra clicks" does not necessarily mean "no evidence tools recorded." Missing KB alone does not impose a fixed Tool Efficiency score: it is still 0 or 1 when evidence tools are missing, and 2 once all evidence tools are recorded. With all evidence tools recorded, the best root cause and resolution, and the other axes perfect, missing KB or SQL confirmation gives at most 93/100.
+
+The displayed total is `round((sum of the five axis scores / 15) * 100)`. These ceilings assume maximum scores on the remaining axes; choosing the right options alone does not guarantee them.
+
 ### 3. Compliance Safety
 Did you avoid the classic support mistakes that create real legal, financial, or security exposure?
 
@@ -68,7 +83,7 @@ Every ticket's tool data, red herring, and correct answers are fixed and curated
 Naming these first, because they are real.
 
 1. **Reply scoring is rule-based, not language understanding.** The engine checks what a QA lead checks first: the customer is addressed by name, a concrete next step exists, a realistic timeframe is stated, no banned over-promising phrases, no full card number / BVN / secret key pasted back. A determined person can satisfy those checks with a mediocre reply. That is why the reference reply is shown after submission for honest self-comparison, and why no "AI grading" is claimed anywhere.
-2. **Root cause and resolution are multiple choice.** Real queues also force you into fixed disposition codes, but writing a diagnosis from scratch is harder than picking one. The skill this simulator enforces is evidence *before* diagnosis: guessing the right answers without opening the tools caps the score at 73/100.
+2. **Root cause and resolution are multiple choice.** Real queues also force you into fixed disposition codes, but writing a diagnosis from scratch is harder than picking one. With any required evidence tool unopened, a correct root cause scores 1/3. Tool Efficiency is 0/3 if none are recorded and 1/3 if only some are recorded. Even if the other three axes are perfect, those cases therefore cap the total at 67/100 and 73/100 respectively, not one universal cap. The engine checks recorded opens at submission, not reading comprehension or whether the diagnosis was selected before investigation.
 3. **Eleven tickets.** Each one was hand-checked by a domain review pass (KYC tiers, NIP settlement clock, wire identifiers, chain decimals, FX math). Eleven verified scenarios were chosen over hundreds of generated ones. The ticket JSON is public, so adding a twelfth is a pull request, not a rebuild.
 4. **One option is marked correct.** Every distractor is written so the tool data contradicts it. If you find a ticket where two options are both defensible, that is a content bug; open an issue and it will be fixed in the open.
 5. **No backend, no accounts, no leaderboard.** Progress lives in your browser's local storage and the score card is a client-side PNG. Nothing is collected, so there is nothing to breach. The trade-off is that scores are self-reported.
